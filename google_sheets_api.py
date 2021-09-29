@@ -17,13 +17,13 @@ class GoogleSheetsApi:
         return apiclient.discovery.build('sheets', 'v4', http=http_auth)
 
     """Function for get  data from range(start_range_point, end_range_point) from Google docs sheets"""
-    """Input: table_id(str), list_name(str), start_range_point(str), end_range_point(str))"""
+    """Input: table_id(str), list_name(str), start_range_point(str), end_range_point(str), majorDimension(str)"""
     """Output: [[[str]]]"""
-    def get_data_from_sheets(self, table_id, list_name, start_range_point, end_range_point):
+    def get_data_from_sheets(self, table_id, list_name, start_range_point, end_range_point, majorDimension):
         values = self.auth_service.spreadsheets().values().get(
             spreadsheetId=table_id,
             range="'{0}'!{1}:{2}".format(list_name, start_range_point, end_range_point),
-            majorDimension='ROWS'
+            majorDimension=majorDimension
         ).execute()
 
         return values['values']
@@ -124,3 +124,11 @@ class GoogleSheetsApi:
         rangeAll = '{0}!A1:Z'.format(list_name)
         body = {}
         self.auth_service.spreadsheets().values().clear(spreadsheetId=table_id, range=rangeAll, body=body).execute()
+
+    """Function return sizes of list"""
+    """Input: table_id(str), list_name(str)"""
+    """Output: [columns_count, rows_count]"""
+    def get_list_size(self, table_id, list_name):
+        request = self.auth_service.spreadsheets().get(spreadsheetId=table_id, ranges=list_name).execute()
+        return [request['sheets'][0]['properties']['gridProperties']['columnCount'],
+                request['sheets'][0]['properties']['gridProperties']['rowCount']]

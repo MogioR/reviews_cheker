@@ -64,14 +64,8 @@ class ReviewAnalysis:
         for raw in data:
             reviews = raw[0].split('\n')
             for review in reviews:
-                spelling = self.is_spoiling(review)
-                if spelling:
-                    self.data = self.data.append({'review': review, 'skill': raw[1], 'type_review': raw[2],
-                                                  'corrected': False, 'spelling': spelling}, ignore_index=True)
-                else:
-                    review, corrected = self.correct_spelling(review)
-                    self.data = self.data.append({'review': review, 'skill': raw[1], 'type_review': raw[2],
-                                              'corrected': corrected, 'spelling': spelling}, ignore_index=True)
+                self.data = self.data.append({'review': review, 'skill': raw[1], 'type_review': raw[2],
+                                              'type_model': raw[3]}, ignore_index=True)
 
     def mark_spelling(self):
         self.data['spelling'] = [True if self.is_spoiling(review) else False for review in self.data['review']]
@@ -166,67 +160,62 @@ class ReviewAnalysis:
                               else False for i, review in self.data.iterrows()]
 
     def mark_name_entity(self):
-        self.data['name_entity'] = [True if self.name_entity(review) else False for review in self.data['review']]
+        self.data['name_entity'] = [True if self.has_name_entity(review) else False for review in self.data['review']]
 
     def report_to_sheet_output(self, sheets_api, table_id, list_name):
         # Clear data
         sheets_api.clear_sheet(table_id, list_name)
 
         # Put header
-        sheets_api.put_row_to_sheets(table_id, list_name, 1, 'A', 'H', [
-            'ReviewData.review',
-            'skill',
-            'type_review',
-            'spelling',
+        sheets_api.put_row_to_sheets(table_id, list_name, 1, 'A', 'I', [
+            'review',
+            'sectionId',
+            'type_page',
+            'type_model',
             'duble',
             'duble_good',
             'name_entity',
-            'duble_class'
+            'duble_class',
+            'comment'
         ])
 
-        self.data = self.data.sort_values(by=['spelling', 'duble_class', 'duble_good'], ascending=True)
-
+        self.buf_data = self.data[self.data['spelling'] == False].sort_values(by=['duble_class', 'duble_good'])
+        print(self.buf_data)
         # Put data
         shift = 2
-        data_list = self.data['review'].to_list()
+        data_list = self.buf_data['review'].to_list()
         sheets_api.put_column_to_sheets(table_id, list_name, 'A', shift, len(data_list) + shift, data_list)
-        data_list = self.data['skill'].to_list()
+        data_list = self.buf_data['skill'].to_list()
         sheets_api.put_column_to_sheets(table_id, list_name, 'B', shift, len(data_list) + shift, data_list)
-        data_list = self.data['type_review'].to_list()
+        data_list = self.buf_data['type_review'].to_list()
         sheets_api.put_column_to_sheets(table_id, list_name, 'C', shift, len(data_list) + shift, data_list)
-
-
-        # # Put spelling
-        spelling_list = self.data['spelling'].to_list()
-        spelling_list = ['spelling' if spelling else '' for spelling in spelling_list]
-        sheets_api.put_column_to_sheets(table_id, list_name, 'D', shift, len(data_list) + shift, spelling_list)
+        data_list = self.buf_data['type_model'].to_list()
+        sheets_api.put_column_to_sheets(table_id, list_name, 'D', shift, len(data_list) + shift, data_list)
 
         # Put duplicates
-        dubles_list = self.data['duble'].to_list()
+        dubles_list = self.buf_data['duble'].to_list()
         dubles_list = ['duble' if duble else '' for duble in dubles_list]
         sheets_api.put_column_to_sheets(table_id, list_name, 'E', shift, len(data_list) + shift, dubles_list)
 
         # Put goods
-        deep_spelling_list = self.data['corrected'].to_list()
-        good_list = self.data['duble_good'].to_list()
-        good_list = [self.good_spalling_merge(good_list, deep_spelling_list, i) for i in range(len(good_list))]
+        good_list = self.buf_data['duble_good'].to_list()
+        good_list = ['duble_good' if good else '' for good in good_list]
         sheets_api.put_column_to_sheets(table_id, list_name, 'F', shift, len(data_list) + shift, good_list)
 
         # Put name_entitry
-        has_names_list = self.data['name_entity'].to_list()
-        has_names_list = ['name_entity' if has_names_list[i] and not spelling_list[i]
-                          else '' for i in range(len(has_names_list))]
+        has_names_list = self.buf_data['name_entity'].to_list()
+        has_names_list = ['name_entity' if has_names_list[i] else '' for i in range(len(has_names_list))]
         sheets_api.put_column_to_sheets(table_id, list_name, 'G', shift, len(data_list) + shift, has_names_list)
 
         # Put name_entitry
-        good_classes_list = self.data['duble_class'].to_list()
-        good_classes_list = [str(good_class) if good_class != 0 else '' for good_class in good_classes_list]
+        good_classes_list = self.buf_data['duble_class'].to_list()
+        good_classes_list = [str(good_class) for good_class in good_classes_list]
         sheets_api.put_column_to_sheets(table_id, list_name, 'H', shift, len(data_list) + shift, good_classes_list)
 
 
     def report_to_sheet_output_compare(self, sheets_api, table_id, list_name):
         # Put stats
-        sheets_api.put_column_to_sheets(table_id, list_name, 'I', 1, 8, [
+        sheets_api.put_column_to_sheets(table_id, list_name, 'J', 1, 8, [
             'all_review',
             'amount_Spelling',
             'amount_Duble',
@@ -242,7 +231,7 @@ class ReviewAnalysis:
                                          (self.data.spelling == False)]['review'].index)
         ammount_named = len(self.data.loc[(self.data.name_entity == True) &
                                           (self.data.spelling == False)]['review'].index)
-        sheets_api.put_column_to_sheets(table_id, list_name, 'J', 1, 8, [
+        sheets_api.put_column_to_sheets(table_id, list_name, 'K', 1, 8, [
             str(len(self.data.index)),
             str(len(self.data[self.data.spelling == True]['review'].index)),
             str(amount_duble),
@@ -252,7 +241,6 @@ class ReviewAnalysis:
             str(self.amount_words),
             str(self.amount_unique_words / self.amount_words)
         ])
-
 
     def check_end_of_sentence(self, sentence):
         if len(sentence) == 0:
@@ -325,7 +313,7 @@ class ReviewAnalysis:
     """Function check including names in review"""
     """Input: review(str)"""
     """Output: Answer(bool)"""
-    def name_entity(self, review):
+    def has_name_entity(self, review):
         # Detect russian names
         ru_doc = Doc(review)
         ru_doc.segment(self.natasha_segmenter)
@@ -339,48 +327,13 @@ class ReviewAnalysis:
         else:
             return True
 
-    """Function check spelling of review"""
-    """Input: review(str)"""
-    """Output: review(str), True if review have mistakes, else or not"""
-    def correct_spelling(self, review):
-        # Check russian spelling
-        # ru_review = re.sub(r'[A-Za-z]', "", review)
-
-        ru_checker_with_filters = SpellChecker("ru_RU")
-        ru_checker_with_filters.set_text(review)
-        # ru_error_list = [i.word for i in ru_checker_with_filters]
-
-        review_change = False
-        for err in ru_checker_with_filters:
-            if len(err.suggest()) > 0 and len(err.word) > 6:
-                sug = err.suggest()[0]
-                print(err.word,' -> ',sug)
-                err.replace(sug)
-                review_change = True
-
-        # # Deleting russian names and abbreviation
-        # ru_error_without_names = [i for i in ru_error_list if not self.name_entity(i) and not len(i) < 3]
-        # english_string = ' '.join(ru_error_without_names)
-        # english_string_without_abbreviation = re.sub(r"\b[А-ЯЁ\.]{2,}\b", "", english_string)
-        #
-        # # Check english spelling
-        # en_checker_with_filters = SpellChecker("en_US")
-        # en_checker_with_filters.set_text(english_string_without_abbreviation)
-        # en_error_list = [i.word for i in en_checker_with_filters]
-
-        return ru_checker_with_filters.get_text(), review_change
-
-    def good_spalling_merge(self, good, deep_spalling, i):
-        if good[i]:
-            if deep_spalling[i]:
-                return 'spalling_test'
-            else:
-                return 'duble_good'
-        else:
-            return ''
-
     def clear_data(self):
         self.data = pd.DataFrame({'review': [], 'skill': [], 'type_review': []})
         self.amount_unique_words = 0
         self.amount_words = 0
 
+    def has_name_in_start(self, review):
+        has_english_name = len(re.findall(r'^([A-Z][a-z]{0,}\s){1,}-\s{1,}', review)) != 0
+        has_russian_name = len(re.findall(r'^([А-ЯЁ][а-яё]{0,}\s){1,}-\s{1,}', review)) != 0
+
+        return has_english_name or has_russian_name

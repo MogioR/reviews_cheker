@@ -17,6 +17,10 @@ raw_data = sheets.get_data_from_sheets(TABLE_ID, 'Reviews_download', 'A2',
                                        'D'+str(sheets.get_list_size(TABLE_ID, 'Reviews_download')[1]), 'ROWS')
 analysis = ReviewAnalysis()
 
+print(analysis.lemmatization_review(
+            'елена владимировна подошла полностью стороны профессиональных качеств личностных характеристик '
+            'преподавателя английского языка елены владимировны багаевой ребенку класса начальной школы города москвы'))
+
 # print('Calculating: ')
 # print('\tAdd data')
 # analysis.add_data(raw_data)

@@ -25,8 +25,7 @@ import re
 MAX_REVIEWS_COUNT = 10000
 """Words without sense"""
 # nltk.download('stopwords')
-STOP_WORDS = stopwords.words('russian')
-STOP_WORDS2 = get_stop_words('russian')
+STOP_WORDS = get_stop_words('russian') + stopwords.words('russian')
 """Spelling params8."""
 MAX_PERCENT_LATIN_LETTER_IN_REVIEW = 0.25
 MIN_LEN_REVIEW = 200
@@ -87,7 +86,6 @@ class ReviewAnalysis:
         return vectors, csim
 
     def get_duplicat_matrix_v2(self, reviews_good):
-
         # Get cosine_similarity of reviews_good
         cleaned_reviews = list(map(self.clean_review, reviews_good))
         lemmatized_reviews = list(map(self.lemmatization_review, cleaned_reviews))
@@ -294,7 +292,7 @@ class ReviewAnalysis:
     def clean_review(self, review):
         review = review.lower()
         review = ''.join([letter if letter in alphabet else ' ' for letter in review])
-        review = ' '.join([word for word in review.split() if word not in STOP_WORDS2])
+        review = ' '.join([word for word in review.split() if word not in STOP_WORDS])
         return review
 
     """Function lemmatization review string"""
@@ -308,7 +306,7 @@ class ReviewAnalysis:
         for token in doc.tokens:
             token.lemmatize(self.natasha_morph_vocab)
 
-        return ' '.join([_.text for _ in doc.tokens])
+        return ' '.join([_.lemma for _ in doc.tokens])
 
     """Function check including names in review"""
     """Input: review(str)"""
@@ -337,3 +335,8 @@ class ReviewAnalysis:
         has_russian_name = len(re.findall(r'^([А-ЯЁ][а-яё]{0,}\s){1,}-\s{1,}', review)) != 0
 
         return has_english_name or has_russian_name
+
+    def delete_name_in_start(self, review):
+        review = review[review.find('-')+1:].lstrip
+        review[0] = review[0].upper()
+        return review

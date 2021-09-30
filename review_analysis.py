@@ -30,7 +30,7 @@ STOP_WORDS = get_stop_words('russian') + stopwords.words('russian')
 MAX_PERCENT_LATIN_LETTER_IN_REVIEW = 0.25
 MIN_LEN_REVIEW = 200
 """File with google service auth token."""
-DUPLICATES_UNIQUENESS = 0.4
+DUPLICATES_UNIQUENESS = 0.6
 """Russian alphabet with space"""
 alphabet = ["а", "б", "в", "г", "д", "е", "ё", "ж", "з", "и", "й", "к", "л", "м", "н", "о", " ",
             "п", "р", "с", "т", "у", "ф", "х", "ц", "ч", "ш", "щ", "ъ", "ы", "ь", "э", "ю", "я"]
@@ -105,6 +105,92 @@ class ReviewAnalysis:
 
         return vectors, csim
 
+    def mark_duplicates_v2(self):
+        self.data['duble_good'] = True
+        self.data['duble_class'] = 0
+
+        reviews_good = self.data[self.data.spelling == False]['review']
+
+        # Exit if reviews_good is empty
+        if len(reviews_good.values) == 0:
+            print(len(reviews_good.values))
+            return
+
+        vectors, csim = self.get_duplicat_matrix_v1(reviews_good.values)
+
+        # Find duplicates and count uniqueness words
+        duplicates_pairs = []
+        for i in range(len(csim)-1):
+            for j in range(i+1, len(csim[i])):
+                if csim[i][j] >= DUPLICATES_UNIQUENESS:
+                    duplicates_pairs.append([i,j])
+
+
+        # Find uniqueness
+        duble_class = 1
+        originals_list = []
+        for pair in duplicates_pairs:
+            # Both in pair hasn't class
+            if self.get_duble_class(reviews_good, pair[0]) == 0 and self.get_duble_class(reviews_good, pair[1]) == 0:
+                self.data.at[reviews_good.index[pair[0]], 'duble_class'] = duble_class
+                self.data.at[reviews_good.index[pair[1]], 'duble_class'] = duble_class
+                duble_class = duble_class + 1
+
+                if np.count_nonzero(np.array(vectors[pair[0]])) > np.count_nonzero(np.array(vectors[pair[1]])):
+                    self.data.at[reviews_good.index[pair[1]], 'duble_good'] = False
+                    originals_list.append(pair[0])
+                else:
+                    self.data.at[reviews_good.index[pair[0]], 'duble_good'] = False
+                    originals_list.append(pair[1])
+
+            # One in pair hasn't class
+            elif self.get_duble_class(reviews_good, pair[0]) == 0 and self.get_duble_class(reviews_good, pair[1]) != 0:
+                duble_class_1 = self.data.at[reviews_good.index[pair[1]], 'duble_class']
+                self.data.at[reviews_good.index[pair[0]], 'duble_class'] = duble_class_1
+
+                if self.count_uniqueness_words(vectors, pair[0]) > \
+                        self.count_uniqueness_words(vectors, originals_list[duble_class_1 - 1]):
+
+                    self.data.at[reviews_good.index[originals_list[duble_class_1 - 1]], 'duble_good'] = False
+                    originals_list[duble_class_1 - 1] = pair[0]
+                else:
+                    self.data.at[reviews_good.index[pair[0]], 'duble_good'] = False
+
+            elif self.get_duble_class(reviews_good, pair[0]) != 0 and self.get_duble_class(reviews_good, pair[1]) == 0:
+                duble_class_0 = self.data.at[reviews_good.index[pair[0]], 'duble_class']
+                self.data.at[reviews_good.index[pair[1]], 'duble_class'] = duble_class_0
+
+                if self.count_uniqueness_words(vectors, pair[1]) >\
+                        self.count_uniqueness_words(vectors, originals_list[duble_class_0-1]):
+
+                    self.data.at[reviews_good.index[originals_list[duble_class_0-1]], 'duble_good'] = False
+                    originals_list[duble_class_0 - 1] = pair[1]
+                else:
+                    self.data.at[reviews_good.index[pair[1]], 'duble_good'] = False
+
+            # Both in pair has unequal class
+            elif self.get_duble_class(reviews_good, pair[0]) != self.get_duble_class(reviews_good, pair[1]):
+                duble_class_0 = self.get_duble_class(reviews_good, pair[0])
+                duble_class_1 = self.get_duble_class(reviews_good, pair[1])
+
+                if self.count_uniqueness_words(vectors, originals_list[duble_class_0-1]) > \
+                        self.count_uniqueness_words(vectors, originals_list[duble_class_1-1]):
+                    self.data.loc[self.data['duble_class'] == duble_class_1, 'duble_class'] = duble_class_0
+                    self.data.at[reviews_good.index[originals_list[duble_class_1 - 1]], 'duble_good'] = False
+                else:
+                    self.data.loc[self.data['duble_class'] == duble_class_0, 'duble_class'] = duble_class_1
+                    self.data.at[reviews_good.index[originals_list[duble_class_0 - 1]], 'duble_good'] = False
+
+            # Both in pair has equal class
+            else:
+                pass
+
+    def get_duble_class(self, reviews_good, id):
+        return self.data.at[reviews_good.index[id], 'duble_class']
+
+    def count_uniqueness_words(self, vectors, id):
+        return np.count_nonzero(np.array(vectors[id]))
+
     def mark_duplicates(self):
         self.data['duble_good'] = False
         self.data['duble_class'] = 0
@@ -138,9 +224,12 @@ class ReviewAnalysis:
                         max_uniquen = j[1]
                         max_id = j[0]
 
-                    self.data.at[reviews_good.index[j[0]], 'duble_class'] = duble_class
+                    if self.data.at[reviews_good.index[j[0]], 'duble_class'] == 0:
+                        self.data.at[reviews_good.index[j[0]], 'duble_class'] = duble_class
                     self.data.at[reviews_good.index[j[0]], 'duble_good'] = False
-                self.data.at[reviews_good.index[i], 'duble_class'] = duble_class
+
+                if self.data.at[reviews_good.index[i], 'duble_class'] == 0:
+                    self.data.at[reviews_good.index[i], 'duble_class'] = duble_class
                 self.data.at[reviews_good.index[i], 'duble_good'] = False
 
                 if max_uniquen > np.count_nonzero(np.array(vectors[i])):
@@ -160,6 +249,12 @@ class ReviewAnalysis:
     def mark_name_entity(self):
         self.data['name_entity'] = [True if self.has_name_entity(review) else False for review in self.data['review']]
 
+    def delete_names_in_start(self):
+        self.data['spelling_capital'] = [True if self.has_name_in_start(review) else False
+                                     for review in self.data['review']]
+
+        self.data['review'] = self.data['review'].map(lambda x: self.delete_name_in_start(x))
+
     def report_to_sheet_output(self, sheets_api, table_id, list_name):
         # Clear data
         sheets_api.clear_sheet(table_id, list_name)
@@ -177,8 +272,8 @@ class ReviewAnalysis:
             'comment'
         ])
 
-        self.buf_data = self.data[self.data['spelling'] == False].sort_values(by=['duble_class', 'duble_good'])
-        print(self.buf_data)
+        self.buf_data = self.data[self.data['spelling'] == False].sort_values(by=['duble_class', 'duble_good'],
+                                                                              ascending=False)
         # Put data
         shift = 2
         data_list = self.buf_data['review'].to_list()
@@ -191,9 +286,15 @@ class ReviewAnalysis:
         sheets_api.put_column_to_sheets(table_id, list_name, 'D', shift, len(data_list) + shift, data_list)
 
         # Put duplicates
-        dubles_list = self.buf_data['duble'].to_list()
-        dubles_list = ['duble' if duble else '' for duble in dubles_list]
-        sheets_api.put_column_to_sheets(table_id, list_name, 'E', shift, len(data_list) + shift, dubles_list)
+        dubles_list = self.buf_data['duble_good'].to_list()
+        #dubles_list = ['' if duble else 'duble' for duble in dubles_list]
+        #sheets_api.put_column_to_sheets(table_id, list_name, 'E', shift, len(data_list) + shift, dubles_list)
+
+        # Put spelling_capital
+        spelling_capital_list = self.buf_data['spelling_capital'].to_list()
+        spelling_capital_list = [self.merdge(dubles_list,spelling_capital_list,i)
+                                 for i in range(len(spelling_capital_list))]
+        sheets_api.put_column_to_sheets(table_id, list_name, 'E', shift, len(data_list) + shift, spelling_capital_list)
 
         # Put goods
         good_list = self.buf_data['duble_good'].to_list()
@@ -201,8 +302,10 @@ class ReviewAnalysis:
         sheets_api.put_column_to_sheets(table_id, list_name, 'F', shift, len(data_list) + shift, good_list)
 
         # Put name_entitry
+        good_list = self.buf_data['duble_good'].to_list()
         has_names_list = self.buf_data['name_entity'].to_list()
-        has_names_list = ['name_entity' if has_names_list[i] else '' for i in range(len(has_names_list))]
+        has_names_list = ['name_entity' if has_names_list[i] and good_list[i] else ''
+                          for i in range(len(has_names_list))]
         sheets_api.put_column_to_sheets(table_id, list_name, 'G', shift, len(data_list) + shift, has_names_list)
 
         # Put name_entitry
@@ -213,11 +316,12 @@ class ReviewAnalysis:
 
     def report_to_sheet_output_compare(self, sheets_api, table_id, list_name):
         # Put stats
-        sheets_api.put_column_to_sheets(table_id, list_name, 'J', 1, 8, [
+        sheets_api.put_column_to_sheets(table_id, list_name, 'J', 1, 9, [
             'all_review',
-            'amount_Spelling',
             'amount_Duble',
+            'amount_Duble_file',
             'amount_Duble_good',
+            'amount_Spelling',
             'amount_name_entity',
             'amount_unique_words',
             'all_words',
@@ -228,16 +332,18 @@ class ReviewAnalysis:
         amount_duble = len(self.data.loc[(self.data.duble_good == False) &
                                          (self.data.spelling == False)]['review'].index)
         ammount_named = len(self.data.loc[(self.data.name_entity == True) &
+                                          (self.data.duble_good == True) &
                                           (self.data.spelling == False)]['review'].index)
-        sheets_api.put_column_to_sheets(table_id, list_name, 'K', 1, 8, [
+        sheets_api.put_column_to_sheets(table_id, list_name, 'K', 1, 9, [
             str(len(self.data.index)),
-            str(len(self.data[self.data.spelling == True]['review'].index)),
             str(amount_duble),
+            str(0),
             str(reviews_valid - amount_duble),
+            str(len(self.data[self.data.spelling == True]['review'].index)),
             str(ammount_named),
             str(self.amount_unique_words),
             str(self.amount_words),
-            str(self.amount_unique_words / self.amount_words)
+            str(self.amount_unique_words / self.amount_words * 100)
         ])
 
     def check_end_of_sentence(self, sentence):
@@ -337,6 +443,17 @@ class ReviewAnalysis:
         return has_english_name or has_russian_name
 
     def delete_name_in_start(self, review):
-        review = review[review.find('-')+1:].lstrip
-        review[0] = review[0].upper()
-        return review
+        if not self.has_name_in_start(review):
+            return review
+
+        review = review[review.find('-')+1:].lstrip()
+        return review[0].upper() + review[:len(review)-2]
+
+    def merdge(self, duble, spelling_capital, i):
+        if not duble[i]:
+            return 'duble'
+        elif spelling_capital[i]:
+            return 'spelling_capital'
+        else:
+            return ''
+

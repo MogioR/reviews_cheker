@@ -43,7 +43,7 @@ NAMES_DICT = ['профи', 'Ваш репетитор']
 
 class ReviewAnalysis:
     def __init__(self):
-        self.data = pd.DataFrame({'review': [], 'skill': [], 'type_review': []})
+        self.data = pd.DataFrame({'review': [], 'sectionId': [], 'type_page': [], 'type_model': []})
 
         """Natasha parser initialization"""
         self.natasha_emb = NewsEmbedding()
@@ -126,8 +126,7 @@ class ReviewAnalysis:
         for i in range(len(csim)-1):
             for j in range(i+1, len(csim[i])):
                 if csim[i][j] >= DUPLICATES_UNIQUENESS:
-                    duplicates_pairs.append([i,j])
-
+                    duplicates_pairs.append([i, j])
 
         # Find uniqueness
         duble_class = 1
@@ -230,6 +229,31 @@ class ReviewAnalysis:
             else:
                 pass
 
+    def mark_file_duplicates(self, csv_file):
+        self.data['duble_file'] = False
+
+        reviews_good = self.data[self.data.duble_good == True]['review']
+        reviews_file = list(pd.read_csv(csv_file, sep='\t')['review'].values)
+
+        vectors, csim = self.get_duplicat_matrix_v1(list(reviews_good.values) + reviews_file)
+
+        # Find duplicates and count uniqueness words
+        duplicates_pairs = []
+        for i in range(len(csim) - 1):
+            for j in range(i + 1, len(csim[i])):
+                if csim[i][j] >= DUPLICATES_UNIQUENESS:
+                    duplicates_pairs.append([i, j])
+
+        reviews_good_count = len(reviews_good.values)
+
+        # Find uniqueness
+        for pair in duplicates_pairs:
+            if pair[0] < reviews_good_count and pair[1] >= reviews_good_count:
+                self.data.at[reviews_good.index[pair[0]], 'duble_file'] = True
+                self.data.at[reviews_good.index[pair[0]], 'duble_good'] = False
+                self.data.at[reviews_good.index[pair[0]], 'duble_class'] = -1
+
+
     def get_duble_class(self, reviews_good, id):
         return self.data.at[reviews_good.index[id], 'duble_class']
 
@@ -240,7 +264,6 @@ class ReviewAnalysis:
         for local_index in range(len(reviews_good_indexes)):
             if reviews_good_indexes[local_index] == global_index:
                 return local_index
-        print(-1)
         return -1
 
     def find_max_uniqueness_in_class(self, vectors, class_indexes_local, class_id, originals_list):
@@ -257,61 +280,6 @@ class ReviewAnalysis:
     def check_straight_duble(self, duplicates_pairs, i, j):
         return [min(i, j), max(i, j)] in duplicates_pairs
 
-
-    def mark_duplicates(self):
-        self.data['duble_good'] = False
-        self.data['duble_class'] = 0
-
-        reviews_good = self.data[self.data.spelling == False]['review']
-
-        # Exit if reviews_good is empty
-        if len(reviews_good.values) == 0:
-            print(len(reviews_good.values))
-            return
-
-        vectors, csim = self.get_duplicat_matrix_v1(reviews_good.values)
-
-        # Find duplicates and count uniqueness words
-        duplicates = []
-        for i in range(len(csim)):
-            duplicates_buf = []
-            for j in range(len(csim[i])):
-                if i != j and csim[i][j] >= DUPLICATES_UNIQUENESS:
-                    duplicates_buf.append([j, np.count_nonzero(np.array(vectors[j]))])
-            duplicates.append(duplicates_buf)
-
-        # Find uniqueness
-        duble_class = 1
-        for i in range(len(duplicates)):
-            if duplicates[i] != []:
-                max_uniquen = 0
-                max_id = 0
-                for j in duplicates[i]:
-                    if j[1] > max_uniquen:
-                        max_uniquen = j[1]
-                        max_id = j[0]
-
-                    if self.data.at[reviews_good.index[j[0]], 'duble_class'] == 0:
-                        self.data.at[reviews_good.index[j[0]], 'duble_class'] = duble_class
-                    self.data.at[reviews_good.index[j[0]], 'duble_good'] = False
-
-                if self.data.at[reviews_good.index[i], 'duble_class'] == 0:
-                    self.data.at[reviews_good.index[i], 'duble_class'] = duble_class
-                self.data.at[reviews_good.index[i], 'duble_good'] = False
-
-                if max_uniquen > np.count_nonzero(np.array(vectors[i])):
-                    self.data.at[reviews_good.index[max_id], 'duble_good'] = True
-                    duble_class += 1
-                else:
-                    self.data.at[reviews_good.index[i], 'duble_good'] = True
-                    duble_class += 1
-            else:
-                self.data.at[reviews_good.index[i], 'duble_good'] = True
-                self.data.at[reviews_good.index[i], 'duble_class'] = duble_class
-                duble_class += 1
-
-        self.data['duble'] = [True if (not review['duble_good'] and not review['spelling'])
-                              else False for i, review in self.data.iterrows()]
 
     def mark_name_entity(self):
         self.data['name_entity'] = [True if self.has_name_entity(review) else False for review in self.data['review']]
@@ -380,7 +348,6 @@ class ReviewAnalysis:
         good_classes_list = [str(good_class) for good_class in good_classes_list]
         sheets_api.put_column_to_sheets(table_id, list_name, 'H', shift, len(data_list) + shift, good_classes_list)
 
-
     def report_to_sheet_output_compare(self, sheets_api, table_id, list_name):
         # Put stats
         sheets_api.put_column_to_sheets(table_id, list_name, 'J', 1, 9, [
@@ -404,7 +371,7 @@ class ReviewAnalysis:
         sheets_api.put_column_to_sheets(table_id, list_name, 'K', 1, 9, [
             str(len(self.data.index)),
             str(amount_duble),
-            str(0),
+            str(len(self.data[self.data.duble_file == True]['review'].index)),
             str(reviews_valid - amount_duble),
             str(len(self.data[self.data.spelling == True]['review'].index)),
             str(ammount_named),
@@ -412,6 +379,20 @@ class ReviewAnalysis:
             str(self.amount_words),
             str(self.amount_unique_words / self.amount_words * 100)
         ])
+
+    def download_goods(self, google_api, table_id, list_name, csv_file_name):
+        data = google_api.get_data_from_sheets(table_id, list_name, 'A2',
+                                        'D'+str(google_api.get_list_size(table_id, list_name)[1]), 'ROWS')
+        comment = google_api.get_data_from_sheets(table_id, list_name, 'I2',
+                                        'I'+str(google_api.get_list_size(table_id, list_name)[1]), 'ROWS')
+
+        buf_data = pd.DataFrame({'review': [], 'sectionId': [], 'type_page': [], 'type_model': []})
+        for i in range(len(comment)):
+            if comment[i]:
+                buf_data = buf_data.append({'review': data[i][0], 'sectionId': data[i][1], 'type_review': data[i][2],
+                                            'type_model': data[i][3]}, ignore_index=True)
+
+        buf_data.to_csv(csv_file_name, sep='\t', encoding='utf-8', mode='a', index=False, header=False)
 
     def check_end_of_sentence(self, sentence):
         if len(sentence) == 0:
@@ -504,7 +485,7 @@ class ReviewAnalysis:
             return True
 
     def clear_data(self):
-        self.data = pd.DataFrame({'review': [], 'skill': [], 'type_review': []})
+        self.data = pd.DataFrame({'review': [], 'sectionId': [], 'type_page': [], 'type_model': []})
         self.amount_unique_words = 0
         self.amount_words = 0
 

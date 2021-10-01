@@ -150,6 +150,7 @@ crashlytics.properties
 crashlytics-build.properties
 fabric.properties
 
-# Token
+# Somethink
 token.json
 .dic .aff russian/
+*.csv

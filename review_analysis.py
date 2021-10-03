@@ -1,4 +1,3 @@
-from google_sheets_api import GoogleSheetsApi
 import numpy as np
 import pandas as pd
 
@@ -342,7 +341,7 @@ class ReviewAnalysis:
         for i in range(len(comment)):
             if comment[i]:
                 buf_data = buf_data.append({'review': data[i][0], 'sectionId': data[i][1], 'type_review': data[i][2],
-                                            'type_model': data[i][3]}, ignore_index=True)
+                                            'type_model': data[i][3], 'used': False}, ignore_index=True)
 
         buf_data.to_csv(csv_file_name, sep='\t', encoding='utf-8', mode='a', index=False, header=False)
 

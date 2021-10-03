@@ -14,6 +14,7 @@ from natasha import NewsNERTagger
 from natasha import Doc
 
 import re
+import os
 
 """Max num of reviews"""
 MAX_REVIEWS_COUNT = 10000
@@ -50,6 +51,7 @@ class ReviewAnalysis:
         self.amount_unique_words = 0
         self.amount_words = 0
 
+        """Settings"""
         self.duplicates_uniqueness = DUPLICATES_UNIQUENESS
 
     def add_data(self, data):
@@ -103,6 +105,9 @@ class ReviewAnalysis:
 
         reviews_good = self.data[(self.data.duble_good == True) & (self.data.spelling == False)]['review']
         reviews_good_count = len(reviews_good.values)
+
+        if not os.path.exists(csv_file):
+            return
 
         reviews_file = list(pd.read_csv(csv_file, sep='\t')['review'].values)
 
@@ -391,18 +396,12 @@ class ReviewAnalysis:
         else:
             return True
 
-    """Function clear review string"""
-    """Input: review(str)"""
-    """Output: review(str) """
     def clean_review(self, review):
         review = review.lower()
         review = ''.join([letter if letter in alphabet else ' ' for letter in review])
         review = ' '.join([word for word in review.split() if word not in STOP_WORDS])
         return review
 
-    """Function lemmatization review string"""
-    """Input: review(str)"""
-    """Output: review(str) """
     def lemmatization_review(self, review):
         doc = Doc(review)
         doc.segment(self.natasha_segmenter)
@@ -413,9 +412,6 @@ class ReviewAnalysis:
 
         return ' '.join([_.lemma for _ in doc.tokens])
 
-    """Function check including names in review"""
-    """Input: review(str)"""
-    """Output: Answer(bool)"""
     def has_name_entity(self, review):
         # Detect russian names
         ru_doc = Doc(review)
@@ -453,11 +449,4 @@ class ReviewAnalysis:
         review = review[review.find('-')+1:].lstrip()
         return review[0].upper() + review[1:len(review)]
 
-    def merdge(self, duble, spelling_capital, i):
-        if not duble[i]:
-            return 'duble'
-        elif spelling_capital[i]:
-            return 'spelling_capital'
-        else:
-            return ''
 

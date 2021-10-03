@@ -1,6 +1,7 @@
 import unittest
 from review_analysis import ReviewAnalysis
 
+
 class TestReviewAnalysis(unittest.TestCase):
     def setUp(self):
         self.a = ReviewAnalysis()
@@ -178,3 +179,84 @@ class TestReviewAnalysis(unittest.TestCase):
             'английский язык карточка маленький ребенок надпись английский язык специальный рисунок картинка вид '
             'животное наподобие гусь различный наклейщик проходить регулярно урок английский язык мария александрович '
             'впечатление работа положительный мочь дочка получать оценка ранее тройка')
+
+    def test_get_duble_pairs(self):
+        self.a.duplicates_uniqueness = 0.5
+        self.assertEqual(self.a.get_duble_pairs([
+            [1, 0.3, 0, 0.5],
+            [0.3, 1, 0.6, 0],
+            [0, 0.6, 1, 0.7],
+            [0.5, 0, 0.7, 1],
+        ]),
+            [
+                [0, 3], [1, 2], [2, 3]
+            ])
+
+        self.a.duplicates_uniqueness = 0.3
+        self.assertEqual(self.a.get_duble_pairs([
+            [1, 0.3, 0, 0.5],
+            [0.3, 1, 0.6, 0],
+            [0, 0.6, 1, 0.7],
+            [0.5, 0, 0.7, 1],
+        ]),
+            [
+                [0, 1], [0, 3], [1, 2], [2, 3]
+            ])
+
+    def test_get_duplicat_matrix(self):
+        lemmatized_reviews = [
+            "абрикос абрикос абрикос абрикос абрикос абрикос абрикос абрикос абрикос абрикос",
+            "абрикос абрикос абрикос абрикос абрикос абрикос абрикос абрикос абрикос абрикос",
+            "тыква тыква тыква абрикос абрикос абрикос абрикос абрикос абрикос абрикос",
+            "тыква тыква тыква абрикос абрикос абрикос абрикос абрикос арбуз арбуз",
+            "арбуз арбуз арбуз арбуз арбуз арбуз арбуз арбуз арбуз арбуз",
+            "кабочек кабочек кабочек кабочек кабочек кабочек кабочек кабочек кабочек кабочек"
+        ]
+
+        vectors, csim = self.a.get_duplicat_matrix(lemmatized_reviews)
+
+        self.maxDiff = 1
+        self.assertEqual(vectors.tolist(), [
+            [10, 0, 0, 0],
+            [10, 0, 0, 0],
+            [7, 0, 0, 3],
+            [5, 2, 0, 3],
+            [0, 10, 0, 0],
+            [0, 0, 10, 0]])
+
+        csim = csim.round(1)
+        self.assertEqual(csim.tolist(), [
+            [1.0, 1.0, 0.9, 0.8, 0.0, 0.0],
+            [1.0, 1.0, 0.9, 0.8, 0.0, 0.0],
+            [0.9, 0.9, 1.0, 0.9, 0.0, 0.0],
+            [0.8, 0.8, 0.9, 1.0, 0.3, 0.0],
+            [0.0, 0.0, 0.0, 0.3, 1.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0, 0.0, 1.0]])
+
+        self.assertEqual(self.a.amount_unique_words, 4)
+        self.assertEqual(self.a.amount_words, 60)
+
+    def test_mark_duplicates_by_pairs(self):
+        self.a.clear_data()
+        data = [
+            ["абрикос абрикос абрикос абрикос абрикос абрикос абрикос абрикос абрикос абрикос", "", "", ""],
+            ["абрикос абрикос абрикос абрикос абрикос абрикос абрикос абрикос абрикос абрикос", "", "", ""],
+            ["тыква тыква тыква абрикос абрикос абрикос абрикос абрикос абрикос абрикос", "", "", ""],
+            ["тыква тыква тыква абрикос абрикос абрикос абрикос абрикос арбуз арбуз", "", "", ""],
+            ["арбуз арбуз арбуз арбуз арбуз арбуз арбуз арбуз арбуз арбуз", "", "", ""],
+            ["кабочек кабочек кабочек кабочек кабочек кабочек кабочек кабочек кабочек кабочек", "", "", ""],
+        ]
+        self.a.add_data(data)
+        self.a.duplicates_uniqueness = 0.9
+
+        reviews_good = self.a.data['review']
+        cleaned_reviews = list(map(self.a.clean_review, reviews_good.values))
+        lemmatized_reviews = list(map(self.a.lemmatization_review, cleaned_reviews))
+
+        vectors, csim = self.a.get_duplicat_matrix(lemmatized_reviews)
+        duplicates_pairs = self.a.get_duble_pairs(csim)
+        self.a.mark_duplicates_by_pairs(reviews_good, vectors, duplicates_pairs)
+
+        duble_good = [False, False, False, True, True, True]
+        self.assertEqual(self.a.data['duble_good'].values.tolist(), duble_good)
+

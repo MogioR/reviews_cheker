@@ -5,9 +5,7 @@ import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.feature_extraction.text import CountVectorizer
 from nltk.corpus import stopwords
-import nltk
 from stop_words import get_stop_words
-from sklearn.feature_extraction.text import TfidfVectorizer
 
 from natasha import Segmenter
 from natasha import MorphVocab
@@ -15,9 +13,6 @@ from natasha import NewsEmbedding
 from natasha import NewsMorphTagger
 from natasha import NewsNERTagger
 from natasha import Doc
-
-import enchant
-from enchant.checker import SpellChecker
 
 import re
 
@@ -52,13 +47,11 @@ class ReviewAnalysis:
         self.natasha_morph_vocab = MorphVocab()
         self.natasha_morph_tagger = NewsMorphTagger(self.natasha_emb)
 
-        """Enchant parser initialization"""
-        self.enchant_dict_ru = enchant.Dict("ru_RU")
-        self.enchant_dict_en = enchant.Dict("en_US")
-
         """Stats"""
         self.amount_unique_words = 0
         self.amount_words = 0
+
+        self.duplicates_uniqueness = DUPLICATES_UNIQUENESS
 
     def add_data(self, data):
         # Getting data
@@ -66,17 +59,13 @@ class ReviewAnalysis:
             reviews = raw[0].split('\n')
             for review in reviews:
                 review = review.replace('–', '-')
-                self.data = self.data.append({'review': review, 'skill': raw[1], 'type_review': raw[2],
+                self.data = self.data.append({'review': review, 'sectionId': raw[1], 'type_page': raw[2],
                                               'type_model': raw[3]}, ignore_index=True)
 
     def mark_spelling(self):
         self.data['spelling'] = [True if self.is_spoiling(review) else False for review in self.data['review']]
 
-    def get_duplicat_matrix_v1(self, reviews_good):
-        # Get cosine_similarity of reviews_good
-        cleaned_reviews = list(map(self.clean_review, reviews_good))
-        lemmatized_reviews = list(map(self.lemmatization_review, cleaned_reviews))
-
+    def get_duplicat_matrix(self, lemmatized_reviews):
         vectorizer = CountVectorizer().fit_transform(lemmatized_reviews)
         vectors = vectorizer.toarray()
         csim = cosine_similarity(vectors)
@@ -88,30 +77,8 @@ class ReviewAnalysis:
 
         return vectors, csim
 
-    def get_duplicat_matrix_v2(self, reviews_good):
+    def mark_duplicates(self):
         # Get cosine_similarity of reviews_good
-        cleaned_reviews = list(map(self.clean_review, reviews_good))
-        lemmatized_reviews = list(map(self.lemmatization_review, cleaned_reviews))
-
-        vectorizer = CountVectorizer().fit_transform(lemmatized_reviews)
-        vectors = vectorizer.toarray()
-
-        vect = TfidfVectorizer(min_df=1)
-        tfidf = vect.fit_transform(lemmatized_reviews)
-        pairwise_similarity = tfidf * tfidf.T
-        csim = pairwise_similarity.toarray()
-
-        self.amount_unique_words = tfidf.shape[1]
-        self.amount_words = 0
-        for vec in vectors:
-            self.amount_words += sum(vec)
-
-        return vectors, csim
-
-    def mark_duplicates_v2(self):
-        self.data['duble_good'] = True
-        self.data['duble_class'] = 0
-
         reviews_good = self.data[self.data.spelling == False]['review']
 
         # Exit if reviews_good is empty
@@ -119,16 +86,44 @@ class ReviewAnalysis:
             print(len(reviews_good.values))
             return
 
-        vectors, csim = self.get_duplicat_matrix_v1(reviews_good.values)
+        # Lemmatization reviews
+        cleaned_reviews = list(map(self.clean_review, reviews_good.values))
+        lemmatized_reviews = list(map(self.lemmatization_review, cleaned_reviews))
+
+        vectors, csim = self.get_duplicat_matrix(lemmatized_reviews)
 
         # Find duplicates and count uniqueness words
-        duplicates_pairs = []
-        for i in range(len(csim)-1):
-            for j in range(i+1, len(csim[i])):
-                if csim[i][j] >= DUPLICATES_UNIQUENESS:
-                    duplicates_pairs.append([i, j])
+        duplicates_pairs = self.get_duble_pairs(csim)
 
         # Find uniqueness
+        self.mark_duplicates_by_pairs(reviews_good, vectors, duplicates_pairs)
+
+
+    def mark_file_duplicates(self, csv_file):
+        self.data['duble_file'] = False
+
+        reviews_good = self.data[(self.data.duble_good == True) & (self.data.spelling == False)]['review']
+        reviews_good_count = len(reviews_good.values)
+
+        reviews_file = list(pd.read_csv(csv_file, sep='\t')['review'].values)
+
+        cleaned_reviews = list(map(self.clean_review, list(reviews_good.values)+reviews_file))
+        lemmatized_reviews = list(map(self.lemmatization_review, cleaned_reviews))
+
+        vectors, csim = self.get_duplicat_matrix(lemmatized_reviews)
+        duplicates_pairs = self.get_duble_pairs(csim)
+
+        # Find uniqueness
+        for pair in duplicates_pairs:
+            if pair[0] < reviews_good_count and pair[1] >= reviews_good_count:
+                self.data.at[reviews_good.index[pair[0]], 'duble_file'] = True
+                self.data.at[reviews_good.index[pair[0]], 'duble_good'] = False
+                self.data.at[reviews_good.index[pair[0]], 'duble_class'] = -1
+
+    def mark_duplicates_by_pairs(self, reviews_good, vectors, duplicates_pairs):
+        self.data['duble_good'] = True
+        self.data['duble_class'] = 0
+
         duble_class = 1
         originals_list = []
         for pair in duplicates_pairs:
@@ -229,30 +224,13 @@ class ReviewAnalysis:
             else:
                 pass
 
-    def mark_file_duplicates(self, csv_file):
-        self.data['duble_file'] = False
-
-        reviews_good = self.data[self.data.duble_good == True]['review']
-        reviews_file = list(pd.read_csv(csv_file, sep='\t')['review'].values)
-
-        vectors, csim = self.get_duplicat_matrix_v1(list(reviews_good.values) + reviews_file)
-
-        # Find duplicates and count uniqueness words
+    def get_duble_pairs(self, csim):
         duplicates_pairs = []
-        for i in range(len(csim) - 1):
-            for j in range(i + 1, len(csim[i])):
-                if csim[i][j] >= DUPLICATES_UNIQUENESS:
+        for i in range(len(csim)-1):
+            for j in range(i+1, len(csim[i])):
+                if csim[i][j] >= self.duplicates_uniqueness:
                     duplicates_pairs.append([i, j])
-
-        reviews_good_count = len(reviews_good.values)
-
-        # Find uniqueness
-        for pair in duplicates_pairs:
-            if pair[0] < reviews_good_count and pair[1] >= reviews_good_count:
-                self.data.at[reviews_good.index[pair[0]], 'duble_file'] = True
-                self.data.at[reviews_good.index[pair[0]], 'duble_good'] = False
-                self.data.at[reviews_good.index[pair[0]], 'duble_class'] = -1
-
+        return duplicates_pairs
 
     def get_duble_class(self, reviews_good, id):
         return self.data.at[reviews_good.index[id], 'duble_class']
@@ -295,62 +273,36 @@ class ReviewAnalysis:
         sheets_api.clear_sheet(table_id, list_name)
 
         # Put header
-        sheets_api.put_row_to_sheets(table_id, list_name, 1, 'A', 'I', [
+        sheets_api.put_row_to_sheets(table_id, list_name, 1, 'A', 'F', [
             'review',
             'sectionId',
             'type_page',
             'type_model',
-            'duble',
-            'duble_good',
             'name_entity',
-            'duble_class',
             'comment'
         ])
 
-        self.buf_data = self.data[self.data['spelling'] == False].sort_values(by=['duble_class', 'duble_good'],
-                                                                              ascending=False)
+        self.buf_data = self.data[(self.data.duble_good == True) & (self.data.spelling == False)]
         # Put data
         shift = 2
         data_list = self.buf_data['review'].to_list()
         sheets_api.put_column_to_sheets(table_id, list_name, 'A', shift, len(data_list) + shift, data_list)
-        data_list = self.buf_data['skill'].to_list()
+        data_list = self.buf_data['sectionId'].to_list()
         sheets_api.put_column_to_sheets(table_id, list_name, 'B', shift, len(data_list) + shift, data_list)
-        data_list = self.buf_data['type_review'].to_list()
+        data_list = self.buf_data['type_page'].to_list()
         sheets_api.put_column_to_sheets(table_id, list_name, 'C', shift, len(data_list) + shift, data_list)
         data_list = self.buf_data['type_model'].to_list()
         sheets_api.put_column_to_sheets(table_id, list_name, 'D', shift, len(data_list) + shift, data_list)
 
-        # Put duplicates
-        dubles_list = self.buf_data['duble_good'].to_list()
-        #dubles_list = ['' if duble else 'duble' for duble in dubles_list]
-        #sheets_api.put_column_to_sheets(table_id, list_name, 'E', shift, len(data_list) + shift, dubles_list)
-
-        # Put spelling_capital
-        spelling_capital_list = self.buf_data['spelling_capital'].to_list()
-        spelling_capital_list = [self.merdge(dubles_list,spelling_capital_list,i)
-                                 for i in range(len(spelling_capital_list))]
-        sheets_api.put_column_to_sheets(table_id, list_name, 'E', shift, len(data_list) + shift, spelling_capital_list)
-
-        # Put goods
-        good_list = self.buf_data['duble_good'].to_list()
-        good_list = ['duble_good' if good else '' for good in good_list]
-        sheets_api.put_column_to_sheets(table_id, list_name, 'F', shift, len(data_list) + shift, good_list)
-
         # Put name_entitry
-        good_list = self.buf_data['duble_good'].to_list()
         has_names_list = self.buf_data['name_entity'].to_list()
-        has_names_list = ['name_entity' if has_names_list[i] and good_list[i] else ''
-                          for i in range(len(has_names_list))]
-        sheets_api.put_column_to_sheets(table_id, list_name, 'G', shift, len(data_list) + shift, has_names_list)
+        has_names_list = ['name_entity' if has_names_list[i] else '' for i in range(len(has_names_list))]
+        sheets_api.put_column_to_sheets(table_id, list_name, 'E', shift, len(data_list) + shift, has_names_list)
 
-        # Put name_entitry
-        good_classes_list = self.buf_data['duble_class'].to_list()
-        good_classes_list = [str(good_class) for good_class in good_classes_list]
-        sheets_api.put_column_to_sheets(table_id, list_name, 'H', shift, len(data_list) + shift, good_classes_list)
 
     def report_to_sheet_output_compare(self, sheets_api, table_id, list_name):
         # Put stats
-        sheets_api.put_column_to_sheets(table_id, list_name, 'J', 1, 9, [
+        sheets_api.put_column_to_sheets(table_id, list_name, 'G', 1, 9, [
             'all_review',
             'amount_Duble',
             'amount_Duble_file',
@@ -368,7 +320,7 @@ class ReviewAnalysis:
         ammount_named = len(self.data.loc[(self.data.name_entity == True) &
                                           (self.data.duble_good == True) &
                                           (self.data.spelling == False)]['review'].index)
-        sheets_api.put_column_to_sheets(table_id, list_name, 'K', 1, 9, [
+        sheets_api.put_column_to_sheets(table_id, list_name, 'H', 1, 9, [
             str(len(self.data.index)),
             str(amount_duble),
             str(len(self.data[self.data.duble_file == True]['review'].index)),

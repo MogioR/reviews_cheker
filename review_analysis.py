@@ -262,7 +262,6 @@ class ReviewAnalysis:
     def check_straight_duble(self, duplicates_pairs, i, j):
         return [min(i, j), max(i, j)] in duplicates_pairs
 
-
     def mark_name_entity(self):
         self.data['name_entity'] = [True if self.has_name_entity(review) else False for review in self.data['review']]
 
@@ -338,11 +337,10 @@ class ReviewAnalysis:
 
     def download_goods(self, google_api, table_id, list_name, csv_file_name):
         data = google_api.get_data_from_sheets(table_id, list_name, 'A2',
-                                        'D'+str(google_api.get_list_size(table_id, list_name)[1]), 'ROWS')
+                                        'D' + str(google_api.get_list_size(table_id, list_name)[1]), 'ROWS')
         comment = google_api.get_data_from_sheets(table_id, list_name, 'F2',
-                                        'F'+str(google_api.get_list_size(table_id, list_name)[1]), 'ROWS')
+                                        'F' + str(google_api.get_list_size(table_id, list_name)[1]), 'ROWS')
 
-        print(comment)
         buf_data = pd.DataFrame({'review': [], 'sectionId': [], 'type_page': [], 'type_model': []})
         for i in range(len(comment)):
             if comment[i][0] == 'хороший':
@@ -391,10 +389,7 @@ class ReviewAnalysis:
 
         is_ended_sentence = self.check_end_of_sentence(review)
 
-        if is_not_english and is_ended_sentence:
-            return False
-        else:
-            return True
+        return not (is_not_english and is_ended_sentence)
 
     def clean_review(self, review):
         review = review.lower()
@@ -410,7 +405,8 @@ class ReviewAnalysis:
         for token in doc.tokens:
             token.lemmatize(self.natasha_morph_vocab)
 
-        return ' '.join([_.lemma for _ in doc.tokens])
+        lemma_review = ' '.join([_.lemma for _ in doc.tokens])
+        return lemma_review
 
     def has_name_entity(self, review):
         # Detect russian names
@@ -426,10 +422,10 @@ class ReviewAnalysis:
         for special_name in NAMES_DICT:
             dictionary_match = review.find(special_name) != -1 or dictionary_match
 
-        if len(ru_doc.spans) == 0 and english_letters == 0 and not dictionary_match:
-            return False
-        else:
-            return True
+        russian_names_count = len(ru_doc.spans)
+
+        return not (russian_names_count == 0 and english_letters == 0 and not dictionary_match)
+
 
     def clear_data(self):
         self.data = pd.DataFrame({'review': [], 'sectionId': [], 'type_page': [], 'type_model': []})
@@ -447,6 +443,7 @@ class ReviewAnalysis:
             return review
 
         review = review[review.find('-')+1:].lstrip()
-        return review[0].upper() + review[1:len(review)]
+        review = review[0].upper() + review[1:len(review)]
+        return review
 
 

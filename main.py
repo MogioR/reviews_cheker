@@ -16,8 +16,7 @@ sheets = GoogleSheetsApi(TOKEN_FILE)
 raw_data = sheets.get_data_from_sheets(TABLE_ID, 'Reviews_download', 'A2',
                                        'D'+str(sheets.get_list_size(TABLE_ID, 'Reviews_download')[1]), 'ROWS')
 analysis = ReviewAnalysis()
-analysis.download_goods(sheets, TABLE_ID, 'Data_output', 'goods.csv')
-
+# analysis.download_goods(sheets, TABLE_ID, 'Работаем (порог 0.8...)', 'goods.csv')
 print('Calculating: ')
 print('\tAdd data')
 analysis.add_data(raw_data)

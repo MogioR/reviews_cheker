@@ -339,15 +339,15 @@ class ReviewAnalysis:
     def download_goods(self, google_api, table_id, list_name, csv_file_name):
         data = google_api.get_data_from_sheets(table_id, list_name, 'A2',
                                         'D'+str(google_api.get_list_size(table_id, list_name)[1]), 'ROWS')
-        comment = google_api.get_data_from_sheets(table_id, list_name, 'I2',
-                                        'I'+str(google_api.get_list_size(table_id, list_name)[1]), 'ROWS')
+        comment = google_api.get_data_from_sheets(table_id, list_name, 'F2',
+                                        'F'+str(google_api.get_list_size(table_id, list_name)[1]), 'ROWS')
 
+        print(comment)
         buf_data = pd.DataFrame({'review': [], 'sectionId': [], 'type_page': [], 'type_model': []})
         for i in range(len(comment)):
-            if comment[i]:
+            if comment[i][0] == 'хороший':
                 buf_data = buf_data.append({'review': data[i][0], 'sectionId': data[i][1], 'type_review': data[i][2],
                                             'type_model': data[i][3], 'used': False}, ignore_index=True)
-
         buf_data.to_csv(csv_file_name, sep='\t', encoding='utf-8', mode='a', index=False, header=False)
 
     def check_end_of_sentence(self, sentence):

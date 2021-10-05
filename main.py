@@ -3,7 +3,6 @@ import string
 from google_sheets_api import GoogleSheetsApi
 from review_analysis import ReviewAnalysis
 
-
 """Options"""
 TOKEN_FILE = 'token.json'                                   # File with google service auth token.
 TABLE_ID = '1pucp3M5mV0bQHNI8KjdLcwzU8ry3YyAYRXc2xQp7RQs'   # ID Google Sheets document

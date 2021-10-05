@@ -1,5 +1,3 @@
-import string
-
 from google_sheets_api import GoogleSheetsApi
 from review_analysis import ReviewAnalysis
 

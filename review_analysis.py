@@ -1,3 +1,6 @@
+import re
+import os
+
 import numpy as np
 import pandas as pd
 
@@ -5,16 +8,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.feature_extraction.text import CountVectorizer
 from nltk.corpus import stopwords
 from stop_words import get_stop_words
-
-from natasha import Segmenter
-from natasha import MorphVocab
-from natasha import NewsEmbedding
-from natasha import NewsMorphTagger
-from natasha import NewsNERTagger
-from natasha import Doc
-
-import re
-import os
+from natasha import Segmenter, MorphVocab, NewsEmbedding, NewsMorphTagger, NewsNERTagger, Doc
 
 """Words without sense"""
 STOP_WORDS = get_stop_words('russian') + stopwords.words('russian')

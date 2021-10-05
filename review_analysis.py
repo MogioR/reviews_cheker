@@ -16,10 +16,7 @@ from natasha import Doc
 import re
 import os
 
-"""Max num of reviews"""
-MAX_REVIEWS_COUNT = 10000
 """Words without sense"""
-# nltk.download('stopwords')
 STOP_WORDS = get_stop_words('russian') + stopwords.words('russian')
 """Spelling params8."""
 MAX_PERCENT_LATIN_LETTER_IN_REVIEW = 0.25

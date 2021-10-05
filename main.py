@@ -3,15 +3,10 @@ import string
 from google_sheets_api import GoogleSheetsApi
 from review_analysis import ReviewAnalysis
 
-"""File with google service auth token."""
-TOKEN_FILE = 'token.json'
-"""ID Google Sheets document"""
-
-"""Max num of reviews"""
-MAX_REVIEWS_COUNT = 10000
 
 """Options"""
-TABLE_ID = '1pucp3M5mV0bQHNI8KjdLcwzU8ry3YyAYRXc2xQp7RQs'   # Table id (in url)
+TOKEN_FILE = 'token.json'                                   # File with google service auth token.
+TABLE_ID = '1pucp3M5mV0bQHNI8KjdLcwzU8ry3YyAYRXc2xQp7RQs'   # ID Google Sheets document
 REPORT_LIST = 'Data_output'                                 # Name of list for upload report
 DATA_LIST = 'Reviews_download'                              # Name of list for download data
 GOODS_LIST = 'Работаем (порог 0.8...)'                      # Name of list for download goods

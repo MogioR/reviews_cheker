@@ -12,12 +12,12 @@ MAX_REVIEWS_COUNT = 10000
 
 """Options"""
 TABLE_ID = '1pucp3M5mV0bQHNI8KjdLcwzU8ry3YyAYRXc2xQp7RQs'   # Table id (in url)
-REPORT_LIST = 'Data_output'                                 # Name of list for download goods
-DATA_LIST = 'Reviews_download'                              # Name of list for download
-GOODS_LIST = 'Работаем (порог 0.8...)'                      #
-GOODS_FILE = 'goods.csv'
-MAKE_REPORT = False
-DOWNLOAD_GOODS = True
+REPORT_LIST = 'Data_output'                                 # Name of list for upload report
+DATA_LIST = 'Reviews_download'                              # Name of list for download data
+GOODS_LIST = 'Работаем (порог 0.8...)'                      # Name of list for download goods
+GOODS_FILE = 'goods.csv'                                    # Path/name.csv of goods file
+MAKE_REPORT = False                                         # True if need make report
+DOWNLOAD_GOODS = True                                       # True if need download goods
 
 
 sheets = GoogleSheetsApi(TOKEN_FILE)

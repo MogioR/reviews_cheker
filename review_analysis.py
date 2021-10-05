@@ -343,7 +343,7 @@ class ReviewAnalysis:
 
         buf_data = pd.DataFrame({'review': [], 'sectionId': [], 'type_page': [], 'type_model': []})
         for i in range(len(comment)):
-            if comment[i][0] == 'хороший':
+            if len(comment[i]) > 0 and comment[i][0] == 'хороший':
                 buf_data = buf_data.append({'review': data[i][0], 'sectionId': data[i][1], 'type_review': data[i][2],
                                             'type_model': data[i][3], 'used': False}, ignore_index=True)
 

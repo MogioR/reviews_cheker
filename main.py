@@ -6,16 +6,17 @@ from review_analysis import ReviewAnalysis
 """File with google service auth token."""
 TOKEN_FILE = 'token.json'
 """ID Google Sheets document"""
-TABLE_ID = '1pucp3M5mV0bQHNI8KjdLcwzU8ry3YyAYRXc2xQp7RQs'
+
 """Max num of reviews"""
 MAX_REVIEWS_COUNT = 10000
 
 """Options"""
-REPORT_LIST = 'Data_output'
-DATA_LIST = 'Reviews_download'
-GOODS_LIST = 'Работаем (порог 0.8...)'
+TABLE_ID = '1pucp3M5mV0bQHNI8KjdLcwzU8ry3YyAYRXc2xQp7RQs'   # Table id (in url)
+REPORT_LIST = 'Data_output'                                 # Name of list for download goods
+DATA_LIST = 'Reviews_download'                              # Name of list for download
+GOODS_LIST = 'Работаем (порог 0.8...)'                      #
 GOODS_FILE = 'goods.csv'
-MAKE_REPORT = True
+MAKE_REPORT = False
 DOWNLOAD_GOODS = True
 
 

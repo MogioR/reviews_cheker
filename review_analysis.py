@@ -346,7 +346,11 @@ class ReviewAnalysis:
             if comment[i][0] == 'хороший':
                 buf_data = buf_data.append({'review': data[i][0], 'sectionId': data[i][1], 'type_review': data[i][2],
                                             'type_model': data[i][3], 'used': False}, ignore_index=True)
-        buf_data.to_csv(csv_file_name, sep='\t', encoding='utf-8', mode='a', index=False, header=False)
+
+        if os.path.exists(csv_file_name):
+            buf_data.to_csv(csv_file_name, sep='\t', encoding='utf-8', mode='a', index=False, header=False)
+        else:
+            buf_data.to_csv(csv_file_name, sep='\t', encoding='utf-8', index=False, header=True)
 
     def check_end_of_sentence(self, sentence):
         if len(sentence) == 0:

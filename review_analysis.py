@@ -267,7 +267,7 @@ class ReviewAnalysis:
         sheets_api.clear_sheet(table_id, list_name)
 
         # Put header
-        sheets_api.put_row_to_sheets(table_id, list_name, 1, 'A', 'F', [
+        sheets_api.put_row_to_sheets(table_id, list_name, 1, 'A', [
             'review',
             'sectionId',
             'type_page',
@@ -280,23 +280,23 @@ class ReviewAnalysis:
         # Put data
         shift = 2
         data_list = self.buf_data['review'].to_list()
-        sheets_api.put_column_to_sheets(table_id, list_name, 'A', shift, len(data_list) + shift, data_list)
+        sheets_api.put_column_to_sheets(table_id, list_name, 'A', shift, data_list)
         data_list = self.buf_data['sectionId'].to_list()
-        sheets_api.put_column_to_sheets(table_id, list_name, 'B', shift, len(data_list) + shift, data_list)
+        sheets_api.put_column_to_sheets(table_id, list_name, 'B', shift, data_list)
         data_list = self.buf_data['type_page'].to_list()
-        sheets_api.put_column_to_sheets(table_id, list_name, 'C', shift, len(data_list) + shift, data_list)
+        sheets_api.put_column_to_sheets(table_id, list_name, 'C', shift, data_list)
         data_list = self.buf_data['type_model'].to_list()
-        sheets_api.put_column_to_sheets(table_id, list_name, 'D', shift, len(data_list) + shift, data_list)
+        sheets_api.put_column_to_sheets(table_id, list_name, 'D', shift, data_list)
 
         # Put name_entitry
         has_names_list = self.buf_data['name_entity'].to_list()
         has_names_list = ['name_entity' if has_names_list[i] else '' for i in range(len(has_names_list))]
-        sheets_api.put_column_to_sheets(table_id, list_name, 'E', shift, len(data_list) + shift, has_names_list)
+        sheets_api.put_column_to_sheets(table_id, list_name, 'E', shift, has_names_list)
 
 
     def report_to_sheet_output_compare(self, sheets_api, table_id, list_name):
         # Put stats
-        sheets_api.put_column_to_sheets(table_id, list_name, 'G', 1, 9, [
+        sheets_api.put_column_to_sheets(table_id, list_name, 'G', 1, [
             'all_review',
             'amount_Duble',
             'amount_Duble_file',
@@ -314,7 +314,7 @@ class ReviewAnalysis:
         ammount_named = len(self.data.loc[(self.data.name_entity == True) &
                                           (self.data.duble_good == True) &
                                           (self.data.spelling == False)]['review'].index)
-        sheets_api.put_column_to_sheets(table_id, list_name, 'H', 1, 9, [
+        sheets_api.put_column_to_sheets(table_id, list_name, 'H', 1, [
             str(len(self.data.index)),
             str(amount_duble),
             str(len(self.data[self.data.duble_file == True]['review'].index)),

@@ -9,12 +9,11 @@ DATA_LIST = 'Reviews_download'                              # Name of list for d
 GOODS_LIST = 'Работаем (порог 0.8...)'                      # Name of list for download goods
 GOODS_FILE = 'goods.csv'                                    # Path/name.csv of goods file
 MAKE_REPORT = False                                         # True if need make report
-DOWNLOAD_GOODS = True                                       # True if need download goods
+DOWNLOAD_GOODS = False                                      # True if need download goods
 
 
 sheets = GoogleSheetsApi(TOKEN_FILE)
 analysis = ReviewAnalysis()
-
 if DOWNLOAD_GOODS:
     analysis.download_goods(sheets, TABLE_ID, GOODS_LIST, GOODS_FILE)
 

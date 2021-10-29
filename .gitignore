@@ -151,6 +151,6 @@ crashlytics-build.properties
 fabric.properties
 
 # Somethink
-token.json
+Environment/token.json
 .dic .aff russian/
 *.csv

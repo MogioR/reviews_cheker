@@ -1,7 +1,7 @@
 import unittest
-from review_analysis import ReviewAnalysis
-import numpy as np
 import pandas as pd
+from Modules.review_analysis import ReviewAnalysis
+
 
 class TestReviewAnalysis(unittest.TestCase):
     def setUp(self):

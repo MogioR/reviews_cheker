@@ -1,14 +1,14 @@
-from google_sheets_api import GoogleSheetsApi
-from review_analysis import ReviewAnalysis
+from Modules.google_sheets_api import GoogleSheetsApi
+from Modules.review_analysis import ReviewAnalysis
 
 """Options"""
-TOKEN_FILE = 'token.json'                                   # File with google service auth token.
+TOKEN_FILE = 'Environment/google_token.json'  # File with google service auth token.
 TABLE_ID = '1pucp3M5mV0bQHNI8KjdLcwzU8ry3YyAYRXc2xQp7RQs'   # ID Google Sheets document
-REPORT_LIST = 'Data_output'                                 # Name of list for upload report
+REPORT_LIST = 'Data_output_test'                                 # Name of list for upload report
 DATA_LIST = 'Reviews_download'                              # Name of list for download data
 GOODS_LIST = 'Работаем (порог 0.8...)'                      # Name of list for download goods
 GOODS_FILE = 'goods.csv'                                    # Path/name.csv of goods file
-MAKE_REPORT = False                                         # True if need make report
+MAKE_REPORT = True                                         # True if need make report
 DOWNLOAD_GOODS = False                                      # True if need download goods
 
 
@@ -40,3 +40,4 @@ if MAKE_REPORT:
     print('\tSecond')
     analysis.report_to_sheet_output_compare(sheets, TABLE_ID, REPORT_LIST)
     print('Done')
+

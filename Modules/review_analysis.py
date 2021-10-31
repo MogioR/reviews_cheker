@@ -30,6 +30,7 @@ INCLUDING_MISTAKES_COLOR = [1.0, 1.0, 0.0]
 NAMES_DICT = ['профи', 'Ваш репетитор']
 
 NUM_THREADS = 8
+PACKET_SIZE = 250
 
 class ReviewAnalysis:
     def __init__(self):
@@ -520,6 +521,8 @@ class ReviewAnalysis:
         self.data['review'] = self.data['review'].map(lambda x: self.delete_name_in_start(x))
 
     def report_to_sheet_output(self, sheets_api, table_id, list_name):
+        self.buf_data = self.data[(self.data.duble_good == True) & (self.data.spelling == False)]
+
         # Clear data
         sheets_api.clear_sheet(table_id, list_name)
 
@@ -533,22 +536,22 @@ class ReviewAnalysis:
             'comment'
         ])
 
-        self.buf_data = self.data[(self.data.duble_good == True) & (self.data.spelling == False)]
         # Put data
         shift = 2
+        packet_size = PACKET_SIZE
         data_list = self.buf_data['review'].to_list()
-        sheets_api.put_column_to_sheets(table_id, list_name, 'A', shift, data_list)
+        sheets_api.put_column_to_sheets_packets(table_id, list_name, 'A', shift, data_list, packet_size)
         data_list = self.buf_data['sectionId'].to_list()
-        sheets_api.put_column_to_sheets(table_id, list_name, 'B', shift, data_list)
+        sheets_api.put_column_to_sheets_packets(table_id, list_name, 'B', shift, data_list, packet_size)
         data_list = self.buf_data['type_page'].to_list()
-        sheets_api.put_column_to_sheets(table_id, list_name, 'C', shift, data_list)
+        sheets_api.put_column_to_sheets_packets(table_id, list_name, 'C', shift, data_list, packet_size)
         data_list = self.buf_data['type_model'].to_list()
-        sheets_api.put_column_to_sheets(table_id, list_name, 'D', shift, data_list)
+        sheets_api.put_column_to_sheets_packets(table_id, list_name, 'D', shift, data_list, packet_size)
 
         # Put name_entitry
         has_names_list = self.buf_data['name_entity'].to_list()
         has_names_list = ['name_entity' if has_names_list[i] else '' for i in range(len(has_names_list))]
-        sheets_api.put_column_to_sheets(table_id, list_name, 'E', shift, has_names_list)
+        sheets_api.put_column_to_sheets_packets(table_id, list_name, 'E', shift, has_names_list, packet_size)
 
 
     def report_to_sheet_output_compare(self, sheets_api, table_id, list_name):

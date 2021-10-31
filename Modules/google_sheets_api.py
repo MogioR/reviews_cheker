@@ -48,6 +48,20 @@ class GoogleSheetsApi:
         self.put_data_to_sheets(table_id, list_name, column + str(start_row),
                            column + str(start_row+len(data)), 'ROWS', values)
 
+    # Put data to document table_id, sheet list_name in column column(char) and range [start_row, start_row+len(data)]
+    # by packets with size packet_size
+    def put_column_to_sheets_packets(self, table_id, list_name, column, start_row, data, packet_size):
+        # Division data from pakets
+        def func_chunks_generators(lst, n):
+            for i in range(0, len(lst), n):
+                yield lst[i: i + n]
+        packets = list(func_chunks_generators(data, packet_size))
+
+        shift = 0
+        for packet in packets:
+            self.put_column_to_sheets(table_id, list_name, column, start_row+shift, packet)
+            shift += packet_size
+
     # Put data to document table_id, sheet list_name in row column and
     # range [start_column(char), start_column+len(data)]
     def put_row_to_sheets(self, table_id, list_name, row, start_column, data):

@@ -154,3 +154,4 @@ fabric.properties
 Environment/token.json
 .dic .aff russian/
 *.csv
+*.json

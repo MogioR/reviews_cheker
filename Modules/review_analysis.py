@@ -32,6 +32,7 @@ NAMES_DICT = ['профи', 'Ваш репетитор']
 NUM_THREADS = 8
 PACKET_SIZE = 250
 
+
 class ReviewAnalysis:
     def __init__(self):
         self.data = pd.DataFrame({'review': [], 'sectionId': [], 'type_page': [], 'type_model': []})

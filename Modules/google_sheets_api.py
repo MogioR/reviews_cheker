@@ -1,4 +1,6 @@
 import httplib2
+import time
+
 import apiclient.discovery
 from oauth2client.service_account import ServiceAccountCredentials
 
@@ -6,7 +8,11 @@ from oauth2client.service_account import ServiceAccountCredentials
 class GoogleSheetsApi:
     def __init__(self, token):
         self.auth_service = None
+        self.request_count = 0
+        self.request_limit = 60
+        self.request_sleep = 200
         self.authorization(token)
+
 
     # Authorisation in serves google
     # Accept: authorisation token
@@ -16,10 +22,16 @@ class GoogleSheetsApi:
             ['https://www.googleapis.com/auth/spreadsheets'])
         http_auth = credentials.authorize(httplib2.Http())
         self.auth_service = apiclient.discovery.build('sheets', 'v4', http=http_auth)
+        self.request_count += 1
 
     # Get data from document table_id, sheet list_name in range [start_range_point, end_range_point]
     # Return: mas with data with major_dimension (ROWS/COLUMNS)
     def get_data_from_sheets(self, table_id, list_name, start_range_point, end_range_point, major_dimension):
+        self.request_count += 1
+        if self.request_count >= self.request_limit:
+            self.request_count = 0
+            time.sleep(self.request_sleep)
+
         values = self.auth_service.spreadsheets().values().get(
             spreadsheetId=table_id,
             range="'{0}'!{1}:{2}".format(list_name, start_range_point, end_range_point),
@@ -31,6 +43,14 @@ class GoogleSheetsApi:
     # Put data to document table_id, sheet list_name in range [start_range_point, end_range_point]
     # in major_dimension (ROWS/COLUMNS)
     def put_data_to_sheets(self, table_id, list_name, start_range_point, end_range_point, major_dimension, data):
+        self.request_count += 1
+        print(self.request_count)
+        if self.request_count >= self.request_limit:
+            self.request_count = 0
+            print('sleep')
+            time.sleep(self.request_sleep)
+
+
         values = self.auth_service.spreadsheets().values().batchUpdate(
             spreadsheetId=table_id,
             body={
@@ -72,6 +92,10 @@ class GoogleSheetsApi:
 
     # Get sheet_id of list_name in document table_id"""
     def get_sheet_id(self, table_id, list_name):
+        self.request_count += 1
+        if self.request_count >= self.request_limit:
+            self.request_count = 0
+            time.sleep(self.request_sleep)
         spreadsheet = self.auth_service.spreadsheets().get(spreadsheetId=table_id).execute()
         sheet_id = None
         for _sheet in spreadsheet['sheets']:
@@ -121,18 +145,30 @@ class GoogleSheetsApi:
 
     # Apply spreadsheets requests on document table_id
     def apply_spreadsheets_requests(self, table_id, requests):
+        self.request_count += 1
+        if self.request_count >= self.request_limit:
+            self.request_count = 0
+            time.sleep(self.request_sleep)
         self.auth_service.spreadsheets().batchUpdate(
             spreadsheetId=table_id,
             body={"requests": [requests]}).execute()
 
     # Clear sheet list_name in document table_id
     def clear_sheet(self, table_id, list_name):
+        self.request_count += 1
+        if self.request_count >= self.request_limit:
+            self.request_count = 0
+            time.sleep(self.request_sleep)
         range_all = '{0}!A1:Z'.format(list_name)
         self.auth_service.spreadsheets().values().clear(spreadsheetId=table_id, range=range_all, body={}).execute()
 
     # Get sizes of sheet list_name in document table_id"""
     # Return [column_count, row_count]
     def get_list_size(self, table_id, list_name):
+        self.request_count += 1
+        if self.request_count >= self.request_limit:
+            self.request_count = 0
+            time.sleep(self.request_sleep)
         request = self.auth_service.spreadsheets().get(spreadsheetId=table_id, ranges=list_name).execute()
         return [request['sheets'][0]['properties']['gridProperties']['columnCount'],
                 request['sheets'][0]['properties']['gridProperties']['rowCount']]

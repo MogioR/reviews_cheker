@@ -9,13 +9,13 @@ cymem==2.0.5
 DAWG-Python==0.7.2
 docopt==0.6.2
 en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.1.0/en_core_web_sm-3.1.0-py3-none-any.whl
-google-api-core==2.0.1
-google-api-python-client==1.7.11
-google-auth==1.6.3
-google-auth-httplib2==0.0.3
-google-auth-oauthlib==0.4.6
-googleapis-common-protos==1.53.0
-httplib2==0.13.1
+google-api-core
+google-api-python-client
+google-auth
+google-auth-httplib2
+google-auth-oauthlib
+googleapis-common-protos
+httplib2
 idna==3.2
 intervaltree==3.1.0
 ipymarkup==0.9.0

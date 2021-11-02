@@ -1,3 +1,5 @@
+import time
+
 from Modules.google_sheets_api import GoogleSheetsApi
 from Modules.review_analysis import ReviewAnalysis
 
@@ -8,13 +10,13 @@ REPORT_LIST = 'Data_output'                                 # Name of list for u
 DATA_LIST = 'Reviews_download'                              # Name of list for download data
 GOODS_LIST = 'Работаем (порог 0.8...)'                      # Name of list for download goods
 GOODS_FILE = 'goods.csv'                                    # Path/name.csv of goods file
-MAKE_REPORT = True                                         # True if need make report
+MAKE_REPORT = True                                          # True if need make report
 DOWNLOAD_GOODS = False                                      # True if need download goods
 
 
 sheets = GoogleSheetsApi(TOKEN_FILE)
 analysis = ReviewAnalysis()
-# analysis.report_to_sheet_output(sheets, '18CSD7sNaJWQ4DDOv6omd0J2jSYuT7xjlKCyAxSdz-QQ', REPORT_LIST)
+time.sleep(360)
 
 if DOWNLOAD_GOODS:
     analysis.download_goods(sheets, TABLE_ID, GOODS_LIST, GOODS_FILE)
@@ -40,6 +42,8 @@ if MAKE_REPORT:
     print('Sending report')
     print('\tFirst')
     analysis.report_to_sheet_output(sheets, TABLE_ID, REPORT_LIST)
+    if sheets.request_count > 50:
+        time.sleep(sheets.request_sleep)
     sheets = GoogleSheetsApi(TOKEN_FILE)
     print('\tSecond')
     analysis.report_to_sheet_output_compare(sheets, TABLE_ID, REPORT_LIST)

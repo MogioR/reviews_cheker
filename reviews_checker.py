@@ -4,7 +4,7 @@ from Modules.google_sheets_api import GoogleSheetsApi
 from Modules.review_analysis import ReviewAnalysis
 
 """Options"""
-TOKEN_FILE = 'Environment/denis_google_token.json'                # File with google service auth token.
+TOKEN_FILE = 'Environment/google_token.json'                # File with google service auth token.
 TABLE_ID = '18CSD7sNaJWQ4DDOv6omd0J2jSYuT7xjlKCyAxSdz-QQ'   # ID Google Sheets document
 REPORT_LIST = 'Data_output'                                 # Name of list for upload report
 DATA_LIST = 'Reviews_download'                              # Name of list for download data

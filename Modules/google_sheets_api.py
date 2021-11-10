@@ -44,12 +44,9 @@ class GoogleSheetsApi:
     # in major_dimension (ROWS/COLUMNS)
     def put_data_to_sheets(self, table_id, list_name, start_range_point, end_range_point, major_dimension, data):
         self.request_count += 1
-        print(self.request_count)
         if self.request_count >= self.request_limit:
             self.request_count = 0
-            print('sleep')
             time.sleep(self.request_sleep)
-
 
         values = self.auth_service.spreadsheets().values().batchUpdate(
             spreadsheetId=table_id,

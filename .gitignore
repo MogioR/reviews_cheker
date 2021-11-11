@@ -155,3 +155,5 @@ Environment/token.json
 .dic .aff russian/
 *.csv
 *.json
+Environment.
+*.tsv

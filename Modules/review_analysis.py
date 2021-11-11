@@ -32,7 +32,7 @@ NAMES_DICT = ['профи', 'Ваш репетитор', 'Preply']
 
 NUM_THREADS = 8         # Threads num
 PACKET_SIZE = 250       # Google sheets packet size
-DEBUG = True            # Debug mode on/off
+DEBUG = False           # Debug mode on/off
 DEBUG_DATA_SIZE = 100   # Reviews count in debug mode
 
 
@@ -72,7 +72,10 @@ class ReviewAnalysis:
 
     # Mark spelling in data
     def correct_data(self):
-        self.data['review_correct'] = [self.correct_review(review) for review in self.data['review']]
+        review_correct = [self.correct_review(review) for review in self.data['review']]
+        self.data['review_original'] = self.data['review']
+        self.data['review'] = review_correct
+        self.delete_names_in_start()
 
     # Return duplicate matrix of lemmatized_reviews
     def get_duplicat_matrix(self, lemmatized_reviews):
@@ -105,57 +108,11 @@ class ReviewAnalysis:
         lemmatized_reviews = list(map(self.lemmatization_review, cleaned_reviews))
         vectors, csim = self.get_duplicat_matrix(lemmatized_reviews)
 
-        # Find duplicates and count uniqueness words
-        duplicates_pairs = self.get_duble_pairs(csim)
-
         # Find uniqueness
         start = time.time()
-        print(len(duplicates_pairs))
-        self.mark_duplicates_by_pairs2(reviews_good, vectors, duplicates_pairs)
+        self.mark_duplicates_by_csim(reviews_good, csim, vectors)
         goods = len(self.data[(self.data.duble_good == True) & (self.data.spelling == False)]['review'].index)
         print('Time: ', time.time() - start, ' Goods: ', goods)
-
-        reviews_good = self.data[(self.data.duble_good == True) & (self.data.spelling == False)]['review']
-        cleaned_reviews = list(map(self.clean_review, reviews_good.values))
-        lemmatized_reviews = list(map(self.lemmatization_review, cleaned_reviews))
-        vectors, csim = self.get_duplicat_matrix(lemmatized_reviews)
-        duplicates_pairs = self.get_duble_pairs(csim)
-        print('Pairs: ', len(duplicates_pairs))
-
-        # 750 reviews
-        # 1.0 version
-        # Time 0: 0.0021851062774658203  4  0.0005462765693664551
-        # Time  1: 0.03556180000305176  25  8.740425109863282e-05
-        # Time  2: 0.7786939144134521  525  4.162107195172991e-06
-        # Time  3: 47.8442919254303  24197  9.030484264436997e-08
-        # Time  4:  0.29134535789489746   8644   3.370492340292659e-05
-        # Time: 49.486597776412964  Goods: 136
-        # 2.0 version
-        # Time 0:  0.0015990734100341797   4   0.0003997683525085449
-        # Time 1:  0.16376876831054688   25   6.396293640136718e-05
-        # Time 2:  3.01530122756958   525   3.0458541143508183e-06
-        # Time 3:  186.9856116771698   29788   5.368179837633207e-08
-        # Time 4:  0.055640459060668945   3053   1.8224847383121175e-05
-        # Time:  190.7469837665558  Goods:  326
-        # Pairs:  6955
-
-        # 100 reviews
-        # 1.0 version
-        # Time 0:  0.0006761550903320312   2   0.0003380775451660156
-        # Time 1:  0.0   5   0.0
-        # Time 2:  0.005582332611083984   47   0.00011877303427838265
-        # Time 3:  0.027548551559448242   219   0.00012579247287419288
-        # Time 4:  0.010051488876342773   207   4.855791727701823e-05
-        # Time:  0.046797752380371094  Goods:  30
-        # Pairs:  2
-        # 2.0 version
-        # Time 0:  0.0   2   0.0
-        # Time 1:  0.0009958744049072266   5   0.0001991748809814453
-        # Time 2:  0.010789155960083008   47   0.00022955650978900017
-        # Time 3:  0.06602311134338379   374   0.00017653238327107964
-        # Time 4:  0.0   52   0.0
-        # Time:  0.08477234840393066  Goods:  53
-        # Pairs:  198
 
     # Mark duplicates with file in data
     def mark_file_duplicates(self, csv_file: str):
@@ -182,562 +139,38 @@ class ReviewAnalysis:
                 self.data.at[reviews_good.index[pair[0]], 'duble_good'] = False
                 self.data.at[reviews_good.index[pair[0]], 'duble_class'] = -1
 
-    # Mark duplicates by list pairs in data (threading - start)
-    def fast_mark_duplicates_by_pairs(self, reviews_good, vectors, duplicates_pairs: list):
-        buffer_double_good = list(self.data['duble_good'].values)
-        buffer_double_class = list(self.data['duble_class'].values)
-        originals_list = []
+    # Mark duplicates by duplicate matrix (csim) and vectors of reviews (vectors)
+    def mark_duplicates_by_csim(self, reviews_good: pd.Series, csim: np.ndarray, vectors: np.ndarray):
+        unique_words_counts = list(np.count_nonzero(np.array(vec)) for vec in vectors)
+        duplicate_classes = [-1 for _ in range(len(vectors))]
 
-        threads = []
+        # [[2, 11], [2, 91], [30, 70], [40, 64]]
+        for i in range(len(csim)):
+            if duplicate_classes[i] == -1:
+                max_id = i
+                max_unique = unique_words_counts[i]
+                duplicates = []
+                for j in range(len(csim[i])):
+                    if csim[i][j] >= self.duplicates_uniqueness and duplicate_classes[j] == -1:
+                        duplicates.append(j)
+                        if unique_words_counts[j] > max_unique:
+                            max_unique = unique_words_counts[j]
+                            max_id = j
 
-        len_ = math.ceil(len(duplicates_pairs)/NUM_THREADS)
+                if i != max_id:
+                    duplicates = []
 
-        def func_chunks_generators(lst, n):
-            for i in range(0, len(lst), n):
-                yield lst[i: i + n]
-        duplicates_pairs_parts = list(func_chunks_generators(duplicates_pairs, len_))
+                for duplicate_id in duplicates:
+                    if duplicate_classes[duplicate_id] == -1:
+                        duplicate_classes[duplicate_id] = max_id
 
-        count_uniqueness_by_id = list(np.count_nonzero(np.array(i)) for i in vectors)
+        for i in range(len(duplicate_classes)):
+            self.data.at[reviews_good.index[i], 'duble_class'] = duplicate_classes[i] + 1
 
-        for i in range(NUM_THREADS):
-            if i == 0:
-                threads.append(Thread(target=self.fast_mark_duplicates_py_pairs_thread_tqdm,
-                                      args=(buffer_double_good, buffer_double_class, originals_list, reviews_good,
-                                            vectors, duplicates_pairs_parts[i])))
+            if i == duplicate_classes[i]:
+                self.data.at[reviews_good.index[i], 'duble_good'] = True
             else:
-                threads.append(Thread(target=self.fast_mark_duplicates_py_pairs_thread,
-                                      args=(buffer_double_good, buffer_double_class, originals_list, reviews_good,
-                                            vectors, duplicates_pairs_parts[i])))
-        for thread in threads:
-            thread.start()
-
-        for thread in threads:
-            thread.join()
-
-        self.data['duble_good'] = buffer_double_good
-        self.data['duble_class'] = buffer_double_class
-
-    # Mark duplicates by list pairs in data (threading - thread function)
-    def fast_mark_duplicates_py_pairs_thread(self, buffer_double_good, buffer_double_class, originals_list,
-                                             reviews_good, vectors, duplicates_pairs):
-        for pair in duplicates_pairs:
-            # Both in pair hasn't class
-            if buffer_double_class[reviews_good.index[pair[0]]] == 0 and \
-                    buffer_double_class[reviews_good.index[pair[1]]] == 0:
-
-                buffer_double_class[reviews_good.index[pair[0]]] = len(originals_list) + 1
-                buffer_double_class[reviews_good.index[pair[1]]] = len(originals_list) + 1
-
-                if np.count_nonzero(np.array(vectors[pair[0]])) > np.count_nonzero(np.array(vectors[pair[1]])):
-                    buffer_double_good[reviews_good.index[pair[1]]] = False
-                    originals_list.append(pair[0])
-                else:
-                    buffer_double_good[reviews_good.index[pair[0]]] = False
-                    originals_list.append(pair[1])
-
-            # One in pair hasn't class
-            elif buffer_double_class[reviews_good.index[pair[0]]] == 0 and \
-                    buffer_double_class[reviews_good.index[pair[1]]] != 0:
-
-                duble_class_1 = buffer_double_class[reviews_good.index[pair[1]]]
-                buffer_double_class[reviews_good.index[pair[0]]] = duble_class_1
-
-                # Pair[0] is straight duble originals_list[duble_class_1 - 1]
-                if self.check_straight_duble(duplicates_pairs, pair[0], originals_list[duble_class_1 - 1]):
-                    if self.count_uniqueness_words(vectors, pair[0]) > \
-                            self.count_uniqueness_words(vectors, originals_list[duble_class_1 - 1]):
-
-                        buffer_double_good[reviews_good.index[originals_list[duble_class_1 - 1]]] = False
-                        originals_list[duble_class_1 - 1] = pair[0]
-                    else:
-                        buffer_double_good[reviews_good.index[pair[0]]] = False
-                # Else create new class
-                else:
-                    buffer_double_class[reviews_good.index[pair[0]]] = len(originals_list) + 1
-                    originals_list.append(pair[0])
-
-            elif buffer_double_class[reviews_good.index[pair[0]]] != 0 and\
-                    buffer_double_class[reviews_good.index[pair[1]]] == 0:
-
-                duble_class_0 = buffer_double_class[reviews_good.index[pair[0]]]
-                buffer_double_class[reviews_good.index[pair[1]]] = duble_class_0
-
-                # Pair[1] is straight duble originals_list[duble_class_0 - 1]
-                if self.check_straight_duble(duplicates_pairs, pair[1], originals_list[duble_class_0 - 1]):
-                    if self.count_uniqueness_words(vectors, pair[1]) > \
-                            self.count_uniqueness_words(vectors, originals_list[duble_class_0 - 1]):
-
-                        buffer_double_good[reviews_good.index[originals_list[duble_class_0 - 1]]] = False
-                        originals_list[duble_class_0 - 1] = pair[1]
-                    else:
-                        buffer_double_good[reviews_good.index[pair[1]]] = False
-                # Else create new class
-                else:
-                    buffer_double_class[reviews_good.index[pair[1]]] = len(originals_list) + 1
-                    originals_list.append(pair[1])
-
-            # Both in pair has unequal class
-            elif buffer_double_class[reviews_good.index[pair[0]]] != buffer_double_class[reviews_good.index[pair[1]]]:
-                duble_class_0 = buffer_double_class[reviews_good.index[pair[0]]]
-                duble_class_1 = buffer_double_class[reviews_good.index[pair[1]]]
-
-                if self.check_straight_duble(duplicates_pairs, originals_list[duble_class_0 - 1],
-                                             originals_list[duble_class_1 - 1]):
-                    if self.count_uniqueness_words(vectors, originals_list[duble_class_0 - 1]) > \
-                            self.count_uniqueness_words(vectors, originals_list[duble_class_1 - 1]):
-                        # Element mark duble_class in class 0
-                        buffer_double_good[reviews_good.index[originals_list[duble_class_1 - 1]]] = False
-                        buffer_double_class[reviews_good.index[originals_list[duble_class_1 - 1]]] = \
-                            duble_class_0
-
-                        # Search new max in class 1
-                        class_indexes = []
-                        for i in range(len(buffer_double_class)):
-                            if buffer_double_class[i] == duble_class_1:
-                                class_indexes.append(i)
-
-                        if len(class_indexes) > 0:
-                            class_indexes_local = list(
-                                map(lambda x: self.get_local_index(reviews_good.index.to_list(), x), class_indexes))
-                            self.find_max_uniqueness_in_class(vectors, class_indexes_local, duble_class_1 - 1,
-                                                              originals_list)
-                            buffer_double_good[reviews_good.index[originals_list[duble_class_1 - 1]]] = True
-                    else:
-                        # Element mark duble_class in class 1
-                        buffer_double_good[reviews_good.index[originals_list[duble_class_0 - 1]]] = False
-                        buffer_double_class[reviews_good.index[originals_list[duble_class_0 - 1]]] = \
-                            duble_class_1
-
-                        # Search new max in class 0
-                        class_indexes = []
-                        for i in range(len(buffer_double_class)):
-                            if buffer_double_class[i] == duble_class_0:
-                                class_indexes.append(i)
-
-                        if len(class_indexes) > 0:
-                            class_indexes_local = list(
-                                map(lambda x: self.get_local_index(reviews_good.index.to_list(), x), class_indexes))
-                            self.find_max_uniqueness_in_class(vectors, class_indexes_local, duble_class_0 - 1,
-                                                              originals_list)
-                            buffer_double_good[reviews_good.index[originals_list[duble_class_0 - 1]]] = True
-                else:
-                    pass
-
-            # Both in pair has equal class
-            else:
-                pass
-
-    # Mark duplicates by list pairs in data (threading - thread function with progressbar)
-    def fast_mark_duplicates_py_pairs_thread_tqdm(self, buffer_double_good, buffer_double_class, originals_list,
-                                                  reviews_good, vectors, duplicates_pairs):
-        for pair in tqdm(duplicates_pairs):
-            # Both in pair hasn't class
-            if buffer_double_class[reviews_good.index[pair[0]]] == 0 and \
-                    buffer_double_class[reviews_good.index[pair[1]]] == 0:
-
-                buffer_double_class[reviews_good.index[pair[0]]] = len(originals_list) + 1
-                buffer_double_class[reviews_good.index[pair[1]]] = len(originals_list) + 1
-
-                if np.count_nonzero(np.array(vectors[pair[0]])) > np.count_nonzero(np.array(vectors[pair[1]])):
-                    buffer_double_good[reviews_good.index[pair[1]]] = False
-                    originals_list.append(pair[0])
-                else:
-                    buffer_double_good[reviews_good.index[pair[0]]] = False
-                    originals_list.append(pair[1])
-
-            # One in pair hasn't class
-            elif buffer_double_class[reviews_good.index[pair[0]]] == 0 and \
-                    buffer_double_class[reviews_good.index[pair[1]]] != 0:
-
-                duble_class_1 = buffer_double_class[reviews_good.index[pair[1]]]
-                buffer_double_class[reviews_good.index[pair[0]]] = duble_class_1
-
-                # Pair[0] is straight duble originals_list[duble_class_1 - 1]
-                if self.check_straight_duble(duplicates_pairs, pair[0], originals_list[duble_class_1 - 1]):
-                    if self.count_uniqueness_words(vectors, pair[0]) > \
-                            self.count_uniqueness_words(vectors, originals_list[duble_class_1 - 1]):
-
-                        buffer_double_good[reviews_good.index[originals_list[duble_class_1 - 1]]] = False
-                        originals_list[duble_class_1 - 1] = pair[0]
-                    else:
-                        buffer_double_good[reviews_good.index[pair[0]]] = False
-                # Else create new class
-                else:
-                    buffer_double_class[reviews_good.index[pair[0]]] = len(originals_list) + 1
-                    originals_list.append(pair[0])
-
-            elif buffer_double_class[reviews_good.index[pair[0]]] != 0 and\
-                    buffer_double_class[reviews_good.index[pair[1]]] == 0:
-
-                duble_class_0 = buffer_double_class[reviews_good.index[pair[0]]]
-                buffer_double_class[reviews_good.index[pair[1]]] = duble_class_0
-
-                # Pair[1] is straight duble originals_list[duble_class_0 - 1]
-                if self.check_straight_duble(duplicates_pairs, pair[1], originals_list[duble_class_0 - 1]):
-                    if self.count_uniqueness_words(vectors, pair[1]) > \
-                            self.count_uniqueness_words(vectors, originals_list[duble_class_0 - 1]):
-
-                        buffer_double_good[reviews_good.index[originals_list[duble_class_0 - 1]]] = False
-                        originals_list[duble_class_0 - 1] = pair[1]
-                    else:
-                        buffer_double_good[reviews_good.index[pair[1]]] = False
-                # Else create new class
-                else:
-                    buffer_double_class[reviews_good.index[pair[1]]] = len(originals_list) + 1
-                    originals_list.append(pair[1])
-
-            # Both in pair has unequal class
-            elif buffer_double_class[reviews_good.index[pair[0]]] != buffer_double_class[reviews_good.index[pair[1]]]:
-                duble_class_0 = buffer_double_class[reviews_good.index[pair[0]]]
-                duble_class_1 = buffer_double_class[reviews_good.index[pair[1]]]
-
-                if self.check_straight_duble(duplicates_pairs, originals_list[duble_class_0 - 1],
-                                             originals_list[duble_class_1 - 1]):
-                    if self.count_uniqueness_words(vectors, originals_list[duble_class_0 - 1]) > \
-                            self.count_uniqueness_words(vectors, originals_list[duble_class_1 - 1]):
-                        # Element mark duble_class in class 0
-                        buffer_double_good[reviews_good.index[originals_list[duble_class_1 - 1]]] = False
-                        buffer_double_class[reviews_good.index[originals_list[duble_class_1 - 1]]] = \
-                            duble_class_0
-
-                        # Search new max in class 1
-                        class_indexes = []
-                        for i in range(len(buffer_double_class)):
-                            if buffer_double_class[i] == duble_class_1:
-                                class_indexes.append(i)
-
-                        if len(class_indexes) > 0:
-                            class_indexes_local = list(
-                                map(lambda x: self.get_local_index(reviews_good.index.to_list(), x), class_indexes))
-                            self.find_max_uniqueness_in_class(vectors, class_indexes_local, duble_class_1 - 1,
-                                                              originals_list)
-                            buffer_double_good[reviews_good.index[originals_list[duble_class_1 - 1]]] = True
-                    else:
-                        # Element mark duble_class in class 1
-                        buffer_double_good[reviews_good.index[originals_list[duble_class_0 - 1]]] = False
-                        buffer_double_class[reviews_good.index[originals_list[duble_class_0 - 1]]] = \
-                            duble_class_1
-
-                        # Search new max in class 0
-                        class_indexes = []
-                        for i in range(len(buffer_double_class)):
-                            if buffer_double_class[i] == duble_class_0:
-                                class_indexes.append(i)
-
-                        if len(class_indexes) > 0:
-                            class_indexes_local = list(
-                                map(lambda x: self.get_local_index(reviews_good.index.to_list(), x), class_indexes))
-                            self.find_max_uniqueness_in_class(vectors, class_indexes_local, duble_class_0 - 1,
-                                                              originals_list)
-                            buffer_double_good[reviews_good.index[originals_list[duble_class_0 - 1]]] = True
-                else:
-                    pass
-
-            # Both in pair has equal class
-            else:
-                pass
-
-    # Mark duplicates by list pairs in data (one - thread)
-    def mark_duplicates_by_pairs(self, reviews_good, vectors, duplicates_pairs):
-        time0 = 0.0
-        count_0 = 0
-        time1 = 0.0
-        count_1 = 0
-        time2 = 0.0
-        count_2 = 0
-        time3 = 0.0
-        count_3 = 0
-        time4 = 0.0
-        count_4 = 0
-
-        duble_class = 1
-        originals_list = []
-
-        for pair in tqdm(duplicates_pairs):
-            start = time.time()
-            # Both in pair hasn't class
-            if self.get_duble_class(reviews_good, pair[0]) == 0 and self.get_duble_class(reviews_good, pair[1]) == 0:
-                self.data.at[reviews_good.index[pair[0]], 'duble_class'] = duble_class
-                self.data.at[reviews_good.index[pair[1]], 'duble_class'] = duble_class
-
-                duble_class = duble_class + 1
-
-                if np.count_nonzero(np.array(vectors[pair[0]])) > np.count_nonzero(np.array(vectors[pair[1]])):
-                    self.data.at[reviews_good.index[pair[1]], 'duble_good'] = False
-                    originals_list.append(pair[0])
-                else:
-                    self.data.at[reviews_good.index[pair[0]], 'duble_good'] = False
-                    originals_list.append(pair[1])
-
-                time0 += time.time()-start
-                count_0 += 1
-
-            # One in pair hasn't class
-            elif self.get_duble_class(reviews_good, pair[0]) == 0 and self.get_duble_class(reviews_good, pair[1]) != 0:
-                duble_class_1 = self.data.at[reviews_good.index[pair[1]], 'duble_class']
-                self.data.at[reviews_good.index[pair[0]], 'duble_class'] = duble_class_1
-
-                # Pair[0] is straight duble originals_list[duble_class_1 - 1]
-                if self.check_straight_duble(duplicates_pairs, pair[0], originals_list[duble_class_1 - 1]):
-                    if self.count_uniqueness_words(vectors, pair[0]) > \
-                            self.count_uniqueness_words(vectors, originals_list[duble_class_1 - 1]):
-
-                        self.data.at[reviews_good.index[originals_list[duble_class_1 - 1]], 'duble_good'] = False
-                        originals_list[duble_class_1 - 1] = pair[0]
-                    else:
-                        self.data.at[reviews_good.index[pair[0]], 'duble_good'] = False
-                # Else create new class
-                else:
-                    self.data.at[reviews_good.index[pair[0]], 'duble_class'] = duble_class
-                    originals_list.append(pair[0])
-                    duble_class = duble_class + 1
-
-                time1 += time.time() - start
-                count_1 += 1
-
-            elif self.get_duble_class(reviews_good, pair[0]) != 0 and self.get_duble_class(reviews_good, pair[1]) == 0:
-                duble_class_0 = self.get_duble_class(reviews_good, pair[0])
-                self.data.at[reviews_good.index[pair[1]], 'duble_class'] = duble_class_0
-
-                # Pair[1] is straight duble originals_list[duble_class_0 - 1]
-                if self.check_straight_duble(duplicates_pairs, pair[1], originals_list[duble_class_0 - 1]):
-                    if self.count_uniqueness_words(vectors, pair[1]) >\
-                            self.count_uniqueness_words(vectors, originals_list[duble_class_0-1]):
-
-                        self.data.at[reviews_good.index[originals_list[duble_class_0-1]], 'duble_good'] = False
-                        originals_list[duble_class_0 - 1] = pair[1]
-                    else:
-                        self.data.at[reviews_good.index[pair[1]], 'duble_good'] = False
-                # Else create new class
-                else:
-                    self.data.at[reviews_good.index[pair[1]], 'duble_class'] = duble_class
-                    originals_list.append(pair[1])
-                    duble_class = duble_class + 1
-
-                time2 += time.time() - start
-                count_2 += 1
-
-            # Both in pair has unequal class
-            elif self.get_duble_class(reviews_good, pair[0]) != self.get_duble_class(reviews_good, pair[1]):
-                duble_class_0 = self.get_duble_class(reviews_good, pair[0])
-                duble_class_1 = self.get_duble_class(reviews_good, pair[1])
-
-                if self.check_straight_duble(duplicates_pairs, originals_list[duble_class_0 - 1],
-                                             originals_list[duble_class_1 - 1]):
-                    if self.count_uniqueness_words(vectors, originals_list[duble_class_0-1]) > \
-                            self.count_uniqueness_words(vectors, originals_list[duble_class_1-1]):
-                        # Element mark duble_class in class 0
-                        self.data.at[reviews_good.index[originals_list[duble_class_1 - 1]], 'duble_good'] = False
-                        self.data.at[reviews_good.index[originals_list[duble_class_1 - 1]], 'duble_class'] = \
-                            duble_class_0
-
-                        # Search new max in class 1
-                        class_indexes = self.data.loc[self.data['duble_class'] == duble_class_1]['duble_class'].index\
-                            .to_list()
-                        if len(class_indexes) > 0:
-                            class_indexes_local = list(
-                                map(lambda x: self.get_local_index(reviews_good.index.to_list(), x), class_indexes))
-                            self.find_max_uniqueness_in_class(vectors, class_indexes_local, duble_class_1 - 1,
-                                                              originals_list)
-                            self.data.at[reviews_good.index[originals_list[duble_class_1 - 1]], 'duble_good'] = True
-                    else:
-                        # Element mark duble_class in class 1
-                        self.data.at[reviews_good.index[originals_list[duble_class_0 - 1]], 'duble_good'] = False
-                        self.data.at[reviews_good.index[originals_list[duble_class_0 - 1]], 'duble_class'] = \
-                            duble_class_1
-
-                        # Search new max in class 0
-                        class_indexes = self.data.loc[self.data['duble_class'] == duble_class_0]['duble_class'].index \
-                            .to_list()
-                        if len(class_indexes) > 0:
-                            class_indexes_local = list(
-                                map(lambda x: self.get_local_index(reviews_good.index.to_list(), x), class_indexes))
-                            self.find_max_uniqueness_in_class(vectors, class_indexes_local, duble_class_0 - 1,
-                                                              originals_list)
-                            self.data.at[reviews_good.index[originals_list[duble_class_0 - 1]], 'duble_good'] = True
-                else:
-                    pass
-
-                time3 += time.time() - start
-                count_3 += 1
-            # Both in pair has equal class
-            else:
-                time4 += time.time() - start
-                count_4 += 1
-
-        print('Time 0: ', time0, ' ', count_0, ' ', time0/count_0)
-        print('Time 1: ', time1, ' ', count_1, ' ', time1/count_1)
-        print('Time 2: ', time2, ' ', count_2, ' ', time2/count_2)
-        print('Time 3: ', time3, ' ', count_3, ' ', time3/count_3)
-        print('Time 4: ', time4, ' ', count_4, ' ', time4 / count_4)
-
-    # Mark duplicates by list pairs in data (one - thread)
-    def mark_duplicates_by_pairs2(self, reviews_good, vectors, duplicates_pairs):
-        time0 = 0.0
-        count_0 = 0
-        time1 = 0.0
-        count_1 = 0
-        time2 = 0.0
-        count_2 = 0
-        time3 = 0.0
-        count_3 = 0
-        time4 = 0.0
-        count_4 = 0
-
-        duble_class = 1
-        originals_list = []
-
-        start = time.time()
-        normalized_pairs = list([reviews_good.index[pair[0]], reviews_good.index[pair[1]]] for pair in duplicates_pairs)
-        unique_words_counts_local = list(np.count_nonzero(np.array(vec)) for vec in vectors)
-
-        unique_words_counts_global = {}
-        for i, global_index in enumerate(reviews_good.index):
-            unique_words_counts_global[global_index] = unique_words_counts_local[i]
-        print('Time -1: ', time.time()-start)
-
-
-        # self.data.at[reviews_good.index[id], 'duble_class']
-        for pair in tqdm(normalized_pairs):
-            start = time.time()
-            duble_class_0 = self.data.at[pair[0], 'duble_class']
-            duble_class_1 = self.data.at[pair[1], 'duble_class']
-
-            # Both in pair hasn't class
-            if duble_class_0 == 0 and duble_class_1 == 0:
-                self.data.at[pair[0], 'duble_class'] = duble_class
-                self.data.at[pair[1], 'duble_class'] = duble_class
-
-                duble_class += 1
-                if unique_words_counts_global[pair[0]] > unique_words_counts_global[pair[1]]:
-                    self.data.at[pair[1], 'duble_good'] = False
-                    originals_list.append(pair[0])
-                else:
-                    self.data.at[pair[0], 'duble_good'] = False
-                    originals_list.append(pair[1])
-                time0 += time.time() - start
-                count_0 += 1
-
-            # One in pair hasn't class
-            elif duble_class_0 == 0 and duble_class_1 != 0:
-                self.data.at[pair[0], 'duble_class'] = duble_class_1
-
-                # Pair[0] is straight duble originals_list[duble_class_1 - 1]
-                if self.check_straight_duble(duplicates_pairs, pair[0], originals_list[duble_class_1 - 1]):
-                    if unique_words_counts_global[pair[0]] > \
-                            unique_words_counts_global[originals_list[duble_class_1 - 1]]:
-                        self.data.at[originals_list[duble_class_1 - 1], 'duble_good'] = False
-                        originals_list[duble_class_1 - 1] = pair[0]
-                    else:
-                        self.data.at[pair[0], 'duble_good'] = False
-                # Else create new class
-                else:
-                    self.data.at[pair[0], 'duble_class'] = duble_class
-                    originals_list.append(pair[0])
-                    duble_class += 1
-                time1 += time.time() - start
-                count_1 += 1
-
-            elif duble_class_0 != 0 and duble_class_1 == 0:
-                self.data.at[pair[1], 'duble_class'] = duble_class_0
-
-                # Pair[1] is straight duble originals_list[duble_class_0 - 1]
-                if self.check_straight_duble(duplicates_pairs, pair[1], originals_list[duble_class_0 - 1]):
-                    if unique_words_counts_global[pair[1]] > \
-                            unique_words_counts_global[originals_list[duble_class_0 - 1]]:
-                        self.data.at[originals_list[duble_class_0 - 1], 'duble_good'] = False
-                        originals_list[duble_class_0 - 1] = pair[1]
-                    else:
-                        self.data.at[pair[1], 'duble_good'] = False
-                # Else create new class
-                else:
-                    self.data.at[pair[1], 'duble_class'] = duble_class
-                    originals_list.append(pair[1])
-                    duble_class += 1
-                time2 += time.time() - start
-                count_2 += 1
-
-            # # Both in pair has unequal class
-            # elif duble_class_0 != duble_class_1:
-            #     if self.check_straight_duble(duplicates_pairs, originals_list[duble_class_0 - 1],
-            #                                  originals_list[duble_class_1 - 1]):
-            #         if unique_words_counts_global[originals_list[duble_class_0 - 1]] > \
-            #                 unique_words_counts_global[originals_list[duble_class_1 - 1]]:
-            #             # Element mark duble_class in class 0
-            #             self.data.at[originals_list[duble_class_1 - 1], 'duble_good'] = False
-            #             self.data.at[originals_list[duble_class_1 - 1], 'duble_class'] = duble_class_0
-            #
-            #             # Search new max in class 1
-            #             class_indexes = list(self.data.loc[self.data['duble_class'] == duble_class_1]\
-            #                                      ['duble_class'].index.to_list())
-            #
-            #             if len(class_indexes) > 0:
-            #                 self.find_max_uniqueness_in_class_global(class_indexes, duble_class_1 - 1, originals_list,
-            #                                                          unique_words_counts_global)
-            #
-            #                 self.data.at[originals_list[duble_class_1 - 1], 'duble_good'] = True
-            #         else:
-            #             # Element mark duble_class in class 1
-            #             self.data.at[originals_list[duble_class_0 - 1], 'duble_good'] = False
-            #             self.data.at[originals_list[duble_class_0 - 1], 'duble_class'] = duble_class_1
-            #
-            #             # Search new max in class 0
-            #             class_indexes = list(self.data.loc[self.data['duble_class'] == duble_class_0]\
-            #                                      ['duble_class'].index.to_list())
-            #             if len(class_indexes) > 0:
-            #                 self.find_max_uniqueness_in_class_global(class_indexes, duble_class_0 - 1, originals_list,
-            #                                                          unique_words_counts_global)
-            #                 self.data.at[originals_list[duble_class_0 - 1], 'duble_good'] = True
-            elif duble_class_0 != duble_class_1:
-                if self.check_straight_duble(duplicates_pairs, originals_list[duble_class_0 - 1],
-                                             originals_list[duble_class_1 - 1]):
-                    if self.count_uniqueness_words(vectors, originals_list[duble_class_0 - 1]) > \
-                            self.count_uniqueness_words(vectors, originals_list[duble_class_1 - 1]):
-                        # Element mark duble_class in class 0
-                        self.data.at[reviews_good.index[originals_list[duble_class_1 - 1]], 'duble_good'] = False
-                        self.data.at[reviews_good.index[originals_list[duble_class_1 - 1]], 'duble_class'] = \
-                            duble_class_0
-
-                        # Search new max in class 1
-                        class_indexes = self.data.loc[self.data['duble_class'] == duble_class_1]['duble_class'].index \
-                            .to_list()
-                        if len(class_indexes) > 0:
-                            class_indexes_local = list(
-                                map(lambda x: self.get_local_index(reviews_good.index.to_list(), x), class_indexes))
-                            self.find_max_uniqueness_in_class(vectors, class_indexes_local, duble_class_1 - 1,
-                                                              originals_list)
-                            self.data.at[reviews_good.index[originals_list[duble_class_1 - 1]], 'duble_good'] = True
-                    else:
-                        # Element mark duble_class in class 1
-                        self.data.at[reviews_good.index[originals_list[duble_class_0 - 1]], 'duble_good'] = False
-                        self.data.at[reviews_good.index[originals_list[duble_class_0 - 1]], 'duble_class'] = \
-                            duble_class_1
-
-                        # Search new max in class 0
-                        class_indexes = self.data.loc[self.data['duble_class'] == duble_class_0]['duble_class'].index \
-                            .to_list()
-                        if len(class_indexes) > 0:
-                            class_indexes_local = list(
-                                map(lambda x: self.get_local_index(reviews_good.index.to_list(), x), class_indexes))
-                            self.find_max_uniqueness_in_class(vectors, class_indexes_local, duble_class_0 - 1,
-                                                              originals_list)
-                            self.data.at[reviews_good.index[originals_list[duble_class_0 - 1]], 'duble_good'] = True
-                else:
-                    pass
-
-                time3 += time.time() - start
-                count_3 += 1
-    
-            # Both in pair has equal class
-            else:
-                time4 += time.time() - start
-                count_4 += 1
-
-        print('Time 0: ', time0, ' ', count_0, ' ', time0 / count_0)
-        print('Time 1: ', time1, ' ', count_1, ' ', time1 / count_1)
-        print('Time 2: ', time2, ' ', count_2, ' ', time2 / count_2)
-        print('Time 3: ', time3, ' ', count_3, ' ', time3 / count_3)
-        print('Time 4: ', time4, ' ', count_4, ' ', time4 / count_4)
+                self.data.at[reviews_good.index[i], 'duble_good'] = False
 
     # Return duplicate pairs from duplicate matrix csim
     def get_duble_pairs(self, csim):
@@ -747,54 +180,6 @@ class ReviewAnalysis:
                 if csim[i][j] >= self.duplicates_uniqueness:
                     duplicates_pairs.append([i, j])
         return duplicates_pairs
-
-    # Return duplicate class by id
-    def get_duble_class(self, reviews_good, id):
-        return self.data.at[reviews_good.index[id], 'duble_class']
-
-    # Return count uniqueness words by id
-    @staticmethod
-    def count_uniqueness_words(vectors, id):
-        return np.count_nonzero(np.array(vectors[id]))
-
-    # Return local index by global index
-    @staticmethod
-    def get_local_index(reviews_good_indexes, global_index):
-        for local_index in range(len(reviews_good_indexes)):
-            if reviews_good_indexes[local_index] == global_index:
-                return local_index
-        return -1
-
-    # Find max uniqueness review in class, and save in originals_list
-    def find_max_uniqueness_in_class(self, vectors, class_indexes_local, class_id, originals_list: list):
-        max_id = 0
-        max_value = self.count_uniqueness_words(vectors, class_indexes_local[max_id])
-
-        for i in range(len(class_indexes_local)):
-            if self.count_uniqueness_words(vectors, class_indexes_local[i]) > max_value:
-                max_value = self.count_uniqueness_words(vectors, class_indexes_local[i])
-                max_id = i
-
-        originals_list[class_id] = class_indexes_local[max_id]
-
-    # Find max uniqueness review in class, and save in originals_list
-    @staticmethod
-    def find_max_uniqueness_in_class_global(class_indexes: list, class_id: int, originals_list: list,
-                                            unique_words_counts: dict):
-        max_id = 0
-        max_value = unique_words_counts[class_indexes[max_id]]
-
-        for i, class_index in enumerate(class_indexes):
-            if unique_words_counts[class_index] > max_value:
-                max_value = unique_words_counts[class_index]
-                max_id = i
-
-        originals_list[class_id] = class_indexes[max_id]
-    
-    # Return true if reviews i and j is duplicates
-    @staticmethod
-    def check_straight_duble(duplicates_pairs: list, i: int, j: int):
-        return [min(i, j), max(i, j)] in duplicates_pairs
 
     # Mark name entities in data
     def mark_name_entity(self):
@@ -818,7 +203,8 @@ class ReviewAnalysis:
 
     # Send not spelling data in google sheets
     def report_to_sheet_output(self, sheets_api, table_id: str, list_name: str):
-        self.buf_data = self.data[(self.data.duble_good == True) & (self.data.spelling == False)]
+        # self.buf_data = self.data[(self.data.duble_good == True) & (self.data.spelling == False)]
+        buf_data = self.data[(self.data.spelling == False)].sort_values(by=['duble_class', 'duble_good'])
 
         # Put header
         sheets_api.put_row_to_sheets(table_id, list_name, 1, 'A', [
@@ -832,20 +218,19 @@ class ReviewAnalysis:
 
         # Put data
         shift = 2
-        packet_size = PACKET_SIZE
-        data_list = self.buf_data['review'].to_list()
-        sheets_api.put_column_to_sheets_packets(table_id, list_name, 'A', shift, data_list, packet_size)
-        data_list = self.buf_data['sectionId'].to_list()
-        sheets_api.put_column_to_sheets_packets(table_id, list_name, 'B', shift, data_list, packet_size)
-        data_list = self.buf_data['type_page'].to_list()
-        sheets_api.put_column_to_sheets_packets(table_id, list_name, 'C', shift, data_list, packet_size)
-        data_list = self.buf_data['type_model'].to_list()
-        sheets_api.put_column_to_sheets_packets(table_id, list_name, 'D', shift, data_list, packet_size)
+        data_list = buf_data['review'].to_list()
+        sheets_api.put_column_to_sheets_packets(table_id, list_name, 'A', shift, data_list, PACKET_SIZE)
+        data_list = buf_data['sectionId'].to_list()
+        sheets_api.put_column_to_sheets_packets(table_id, list_name, 'B', shift, data_list, PACKET_SIZE)
+        data_list = buf_data['type_page'].to_list()
+        sheets_api.put_column_to_sheets_packets(table_id, list_name, 'C', shift, data_list, PACKET_SIZE)
+        data_list = buf_data['type_model'].to_list()
+        sheets_api.put_column_to_sheets_packets(table_id, list_name, 'D', shift, data_list, PACKET_SIZE)
 
         # Put name_entitry
-        has_names_list = self.buf_data['name_entity'].to_list()
+        has_names_list = buf_data['name_entity'].to_list()
         has_names_list = ['name_entity' if has_names_list[i] else '' for i in range(len(has_names_list))]
-        sheets_api.put_column_to_sheets_packets(table_id, list_name, 'E', shift, has_names_list, packet_size)
+        sheets_api.put_column_to_sheets_packets(table_id, list_name, 'E', shift, has_names_list, PACKET_SIZE)
 
     # Send statistic google sheets
     def report_to_sheet_output_compare(self, sheets_api, table_id, list_name):
@@ -868,6 +253,7 @@ class ReviewAnalysis:
         ammount_named = len(self.data.loc[(self.data.name_entity == True) &
                                           (self.data.duble_good == True) &
                                           (self.data.spelling == False)]['review'].index)
+
         sheets_api.put_column_to_sheets(table_id, list_name, 'H', 1, [
             str(len(self.data.index)),
             str(amount_duble),
@@ -957,8 +343,13 @@ class ReviewAnalysis:
     def correct_review(review):
         # Delete english letter
         review = re.sub(r'[A-Za-z]', '', review)
+
         # Correct end
         review = review.strip()
+
+        if len(review) < 1:
+            return review
+
         if review[-1] != '.' and review[-1] != '!':
             sents = review.split('.')
             sents = sents[:len(sents)-1]

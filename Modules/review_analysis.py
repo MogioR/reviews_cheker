@@ -204,7 +204,7 @@ class ReviewAnalysis:
     # Send not spelling data in google sheets
     def report_to_sheet_output(self, sheets_api, table_id: str, list_name: str):
         # self.buf_data = self.data[(self.data.duble_good == True) & (self.data.spelling == False)]
-        buf_data = self.data[(self.data.spelling == False)].sort_values(by=['duble_class', 'duble_good'])
+        buf_data = self.data[(self.data.duble_good == True) & (self.data.spelling == False)]
 
         # Put header
         sheets_api.put_row_to_sheets(table_id, list_name, 1, 'A', [

@@ -170,7 +170,7 @@ class ReviewAnalysis:
                 self.data.at[reviews_good.index[i], 'duble_good'] = False
 
     # Return duplicate pairs from duplicate matrix csim
-    def get_duble_pairs(self, csim):
+    def get_duble_pairs(self, csim: np.ndarray):
         duplicates_pairs = []
         for i in range(len(csim)-1):
             for j in range(i+1, len(csim[i])):
@@ -182,8 +182,106 @@ class ReviewAnalysis:
     def mark_name_entity(self):
         self.data['name_entity'] = [True if self.has_name_entity(review) else False for review in self.data['review']]
 
+    # TODO sum_names
+    # Return ful name by names dict
+    def sum_names(self, names: dict):
+        pass
+
+    # TODO mark_name_entity_details
+    # Mark names and genders
     def mark_name_entity_details(self):
         pass
+
+    # Return true if name a and b is equal
+    @staticmethod
+    def equal_names(a: list, b: list):
+        if 'first' in a[0].keys() and 'first' in b[0].keys():
+            if len(a[0]['first']) > 1 and len(b[0]['first']) > 1:
+                if a[0]['first'] != b[0]['first']:
+                    return False
+            else:
+                if a[0]['first'][0] != b[0]['first'][0]:
+                    return False
+        if 'last' in a[0].keys() and 'last' in b[0].keys():
+            if 'middle' in a[0].keys() and 'middle' not in b[0].keys():
+                if len(a[0]['last']) > 0 and len(b[0]['last']) > 0:
+                    if a[0]['last'] == b[0]['last']:
+                        return True
+                    elif len(a[0]['middle']) > 1 and a[0]['middle'] == b[0]['last']:
+                        return True
+                    elif a[0]['middle'][0] == b[0]['last'][0]:
+                        return True
+                    else:
+                        return False
+                else:
+                    if a[0]['last'][0] == b[0]['last'][0]:
+                        return True
+                    elif len(a[0]['middle']) > 1 and a[0]['middle'][0] == b[0]['last'][0]:
+                        return True
+                    elif a[0]['middle'][0] == b[0]['last'][0]:
+                        return True
+                    else:
+                        return False
+            elif 'middle' in b[0].keys() and 'middle' not in a[0].keys():
+                if len(b[0]['last']) > 0 and len(a[0]['last']) > 0:
+                    if b[0]['last'] == a[0]['last']:
+                        return True
+                    elif len(b[0]['middle']) > 1 and b[0]['middle'] == a[0]['last']:
+                        return True
+                    elif b[0]['middle'][0] == a[0]['last'][0]:
+                        return True
+                    else:
+                        return False
+                else:
+                    if b[0]['last'][0] == a[0]['last'][0]:
+                        return True
+                    elif len(b[0]['middle']) > 1 and b[0]['middle'][0] == a[0]['last'][0]:
+                        return True
+                    elif b[0]['middle'][0] == a[0]['last'][0]:
+                        return True
+                    else:
+                        return False
+            elif 'middle' in a[0].keys() and 'middle' in b[0].keys():
+                if len(a[0]['last']) > 1 and len(b[0]['last']) > 1:
+                    if a[0]['last'] != b[0]['last']:
+                        return False
+                else:
+                    if a[0]['last'][0] != b[0]['last'][0]:
+                        return False
+                if len(a[0]['middle']) > 1 and len(b[0]['middle']) > 1:
+                    if a[0]['middle'] != b[0]['middle']:
+                        return False
+                else:
+                    if a[0]['middle'][0] != b[0]['middle'][0]:
+                        return False
+        return True
+
+    # Return true if names contains equal names
+    @staticmethod
+    def one_name_in_dict(names: dict):
+        keys = list(names.keys())
+        len_ = len(keys)
+        for i in range(len_-1):
+            for j in range(i+1, len_):
+                if not ReviewAnalysis.equal_names(names[keys[i]], names[keys[j]]):
+                    return False
+        return True
+
+    # Return name and gender of review if in review one entity, and '', '' in another case.
+    @staticmethod
+    def get_name_entity_details(review: str):
+        names = ReviewAnalysis.get_names(review)
+        if names != {} and ReviewAnalysis.one_name_in_dict(names):
+            gender = 'Masc'
+            for name in names.keys():
+                if names[name][1] == 'Fem':
+                    gender = 'Fem'
+
+            name = list(names.keys())[0]
+
+            return name, gender
+        else:
+            return '', ''
 
     # Delete names in start of review in data
     def delete_names_in_start(self):
@@ -192,9 +290,11 @@ class ReviewAnalysis:
 
         self.data['review'] = self.data['review'].map(lambda x: self.delete_name_in_start(x))
 
+    # Save backup self.data to backup_file
     def save_backup(self, backup_file: str):
         self.data.to_csv(backup_file, sep='\t', header=True, index=False)
 
+    # Load backup self.data from backup_file
     def load_backup(self, backup_file: str):
         if os.path.exists(backup_file):
             self.data = pd.read_csv(backup_file, sep='\t')
@@ -233,7 +333,7 @@ class ReviewAnalysis:
         sheets_api.put_column_to_sheets_packets(table_id, list_name, 'E', shift, has_names_list, PACKET_SIZE)
 
     # Send statistic google sheets
-    def report_to_sheet_output_compare(self, sheets_api, table_id, list_name):
+    def report_to_sheet_output_compare(self, sheets_api, table_id: str, list_name: str):
         # Put stats
         sheets_api.put_column_to_sheets(table_id, list_name, 'G', 1, [
             'all_review',
@@ -268,7 +368,7 @@ class ReviewAnalysis:
 
     # Download goods review to csv_file_name
     @staticmethod
-    def download_goods(google_api, table_id, list_name, csv_file_name):
+    def download_goods(google_api, table_id: str, list_name: str, csv_file_name: str):
         data = google_api.get_data_from_sheets(table_id, list_name, 'A2',
                                         'D' + str(google_api.get_list_size(table_id, list_name)[1]), 'ROWS')
         comment = google_api.get_data_from_sheets(table_id, list_name, 'F2',
@@ -287,7 +387,7 @@ class ReviewAnalysis:
 
     # Check true end of sentence (. or !)
     @staticmethod
-    def check_end_of_sentence(sentence):
+    def check_end_of_sentence(sentence: str):
         if len(sentence) == 0:
             return False
 

@@ -16,7 +16,7 @@ DOWNLOAD_GOODS = False                                      # True if need downl
 MAKE_REPORT_BY_BACKUP = False                               # True if need make report by backup
 
 analysis = ReviewAnalysis()
-print(analysis)
+
 if MAKE_REPORT_BY_BACKUP:
     MAKE_REPORT = False
     sheets = GoogleSheetsApi(TOKEN_FILE)

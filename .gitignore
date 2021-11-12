@@ -157,3 +157,4 @@ Environment/token.json
 *.json
 Environment.
 *.tsv
+!Tests/*.tsv

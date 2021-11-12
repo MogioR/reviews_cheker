@@ -1,52 +1,48 @@
 import re
 import os
-import math
 import time
-from threading import Thread
+
 
 import numpy as np
 import pandas as pd
-
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.feature_extraction.text import CountVectorizer
 from nltk.corpus import stopwords
 from stop_words import get_stop_words
 from natasha import Segmenter, MorphVocab, NewsEmbedding, NewsMorphTagger, NewsNERTagger, Doc, NamesExtractor, PER
-from tqdm import tqdm
 
-"""Words without sense"""
-STOP_WORDS = get_stop_words('russian') + stopwords.words('russian')
-"""Spelling params8."""
-MAX_PERCENT_LATIN_LETTER_IN_REVIEW = 0.25
-MIN_LEN_REVIEW = 150
-"""File with google service auth token."""
-DUPLICATES_UNIQUENESS = 0.6
-"""Russian alphabet with space"""
+
+# Analysis params
+MAX_PERCENT_LATIN_LETTER_IN_REVIEW = 0.25           # Max percent latin letters in non-spelling review
+MIN_LEN_REVIEW = 150                                # Min length of non-spelling review
+DUPLICATES_UNIQUENESS = 0.6                         # Percent uniqueness for detect duplicate
+NAMES_DICT = ['профи', 'Ваш репетитор', 'Preply']   # Black words
+
+# Debug params
+PACKET_SIZE = 250                                   # Google sheets packet size
+DEBUG = False                                       # Debug mode on/off
+DEBUG_DATA_SIZE = 100                               # Reviews count in debug mode
+
+# Russian alphabet
 alphabet = ["а", "б", "в", "г", "д", "е", "ё", "ж", "з", "и", "й", "к", "л", "м", "н", "о", " ",
             "п", "р", "с", "т", "у", "ф", "х", "ц", "ч", "ш", "щ", "ъ", "ы", "ь", "э", "ю", "я"]
-"""Colors"""
-INCLUDING_NAMES_COLOR = [0.0, 1.0, 0.0]
-INCLUDING_MISTAKES_COLOR = [1.0, 1.0, 0.0]
-"""Special name entity"""
-NAMES_DICT = ['профи', 'Ваш репетитор', 'Preply']
 
-NUM_THREADS = 8         # Threads num
-PACKET_SIZE = 250       # Google sheets packet size
-DEBUG = False           # Debug mode on/off
-DEBUG_DATA_SIZE = 100   # Reviews count in debug mode
+# Words without sense
+STOP_WORDS = get_stop_words('russian') + stopwords.words('russian')
+
+# Natasha parsers
+natasha_emb = NewsEmbedding()
+natasha_ner_tagger = NewsNERTagger(natasha_emb)
+natasha_segmenter = Segmenter()
+natasha_morph_vocab = MorphVocab()
+natasha_morph_tagger = NewsMorphTagger(natasha_emb)
+natasha_names_extractor = NamesExtractor(natasha_morph_vocab)
 
 
 class ReviewAnalysis:
     def __init__(self):
         self.data = pd.DataFrame({'review': [], 'sectionId': [], 'type_page': [], 'type_model': []})
 
-        """Natasha parser initialization"""
-        self.natasha_emb = NewsEmbedding()
-        self.natasha_ner_tagger = NewsNERTagger(self.natasha_emb)
-        self.natasha_segmenter = Segmenter()
-        self.natasha_morph_vocab = MorphVocab()
-        self.natasha_morph_tagger = NewsMorphTagger(self.natasha_emb)
-        self.natasha_names_extractor = NamesExtractor(self.natasha_morph_vocab)
         """Stats"""
         self.amount_unique_words = 0
         self.amount_words = 0
@@ -126,6 +122,7 @@ class ReviewAnalysis:
             return
 
         reviews_file = list(pd.read_csv(csv_file, sep='\t')['review'].values)
+        print(reviews_file)
         cleaned_reviews = list(map(self.clean_review, list(reviews_good.values)+reviews_file))
         lemmatized_reviews = list(map(self.lemmatization_review, cleaned_reviews))
 
@@ -184,6 +181,9 @@ class ReviewAnalysis:
     # Mark name entities in data
     def mark_name_entity(self):
         self.data['name_entity'] = [True if self.has_name_entity(review) else False for review in self.data['review']]
+
+    def mark_name_entity_details(self):
+        pass
 
     # Delete names in start of review in data
     def delete_names_in_start(self):
@@ -319,7 +319,7 @@ class ReviewAnalysis:
 
     # Return true if review not spelling
     @staticmethod
-    def is_spoiling(review):
+    def is_spoiling(review: str):
         if len(review) < MIN_LEN_REVIEW:
             return True
 
@@ -334,13 +334,13 @@ class ReviewAnalysis:
         # Black words
         black_words = False
         for special_name in NAMES_DICT:
-            black_words = review.find(special_name) != -1 or black_words
+            black_words = review.lower().find(special_name.lower()) != -1 or black_words
 
         return not (is_not_english and is_ended_sentence) or black_words
 
     # Return corrected review
     @staticmethod
-    def correct_review(review):
+    def correct_review(review: str):
         # Delete english letter
         review = re.sub(r'[A-Za-z]', '', review)
 
@@ -359,42 +359,39 @@ class ReviewAnalysis:
 
     # Return review without stop-words and non-letter symbols
     @staticmethod
-    def clean_review(review):
+    def clean_review(review: str):
         review = review.lower()
         review = ''.join([letter if letter in alphabet else ' ' for letter in review])
         review = ' '.join([word for word in review.split() if word not in STOP_WORDS])
         return review
 
     # Return lemma of review
-    def lemmatization_review(self, review):
+    @staticmethod
+    def lemmatization_review(review: str):
         doc = Doc(review)
-        doc.segment(self.natasha_segmenter)
-        doc.tag_morph(self.natasha_morph_tagger)
+        doc.segment(natasha_segmenter)
+        doc.tag_morph(natasha_morph_tagger)
 
         for token in doc.tokens:
-            token.lemmatize(self.natasha_morph_vocab)
+            token.lemmatize(natasha_morph_vocab)
 
         lemma_review = ' '.join([_.lemma for _ in doc.tokens])
         return lemma_review
 
     # Return names of review
-    def get_names(self, review):
+    @staticmethod
+    def get_names(review: str):
         # Detect russian names
         ru_doc = Doc(review)
-        ru_doc.segment(self.natasha_segmenter)
-        ru_doc.tag_morph(self.natasha_morph_tagger)
-        ru_doc.tag_ner(self.natasha_ner_tagger)
-
-        # # Dictionary
-        # dictionary_match = False
-        # for special_name in NAMES_DICT:
-        #     dictionary_match = review.find(special_name) != -1 or dictionary_match
+        ru_doc.segment(natasha_segmenter)
+        ru_doc.tag_morph(natasha_morph_tagger)
+        ru_doc.tag_ner(natasha_ner_tagger)
 
         russian_names = {}
         for span in ru_doc.spans:
             if span.type == PER:
-                span.normalize(self.natasha_morph_vocab)
-                span.extract_fact(self.natasha_names_extractor)
+                span.normalize(natasha_morph_vocab)
+                span.extract_fact(natasha_names_extractor)
                 if span.fact is not None:
                     russian_names[span.normal] = [span.fact.as_dict]
                     gender = 'Masc'
@@ -405,24 +402,12 @@ class ReviewAnalysis:
                 # else:
                 #     print('None fact: ', span.text)
 
-        russian_names_count = len(russian_names.keys())
-
         return russian_names
 
-    # # Return normalised names list
-    # @staticmethod
-    # def normalise_names(names: dict):
-    #     len_ = len(names.keys())
-    #     keys = list(names.keys())
-    #     for i in range(len_):
-    #         for j in range(i+1, len_):
-    #             print(ReviewAnalysis.check_equal_of_names(names[keys[i]][0], names[keys[j]][0]))
-    #
-    #     return 'TOk'
-
     # Return true if review has name entity
-    def has_name_entity(self, review):
-        return len(self.get_names(review).keys()) != 0
+    @staticmethod
+    def has_name_entity(review: str):
+        return len(ReviewAnalysis.get_names(review).keys()) != 0
 
     # Clear data and statistic
     def clear_data(self):
@@ -432,7 +417,7 @@ class ReviewAnalysis:
 
     # Return true if name in start
     @staticmethod
-    def has_name_in_start(review):
+    def has_name_in_start(review: str):
         has_english_name = len(re.findall(r'^([A-Z][a-z]{0,}\s){1,}-\s{1,}', review)) != 0
         has_russian_name = len(re.findall(r'^([А-ЯЁ][а-яё]{0,}\s){1,}-\s{1,}', review)) != 0
 
@@ -440,7 +425,7 @@ class ReviewAnalysis:
 
     # Return review without name in the start
     @staticmethod
-    def delete_name_in_start(review):
+    def delete_name_in_start(review: str):
         if not ReviewAnalysis.has_name_in_start(review):
             return review
 

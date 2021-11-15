@@ -11,7 +11,7 @@ DATA_LIST = 'Reviews_download'                              # Name of list for d
 GOODS_LIST = 'Работаем (порог 0.8...)'                      # Name of list for download goods
 GOODS_FILE = 'goods.tsv'                                    # Path/name.tsv of goods file
 BACKUP_NAME = 'backup.tsv'                                  # Backup name
-MAKE_REPORT = True                                          # True if need make report
+MAKE_REPORT = False                                         # True if need make report
 DOWNLOAD_GOODS = False                                      # True if need download goods
 MAKE_REPORT_BY_BACKUP = False                               # True if need make report by backup
 
@@ -48,6 +48,8 @@ if MAKE_REPORT:
     analysis.mark_file_duplicates(GOODS_FILE)
     print('\tMark name entity')
     analysis.mark_name_entity()
+    print('\tMark name entity details')
+    analysis.mark_name_entity_details()
     print('Save backup')
     analysis.save_backup(BACKUP_NAME)
     print('Sending report')
@@ -60,4 +62,3 @@ if MAKE_REPORT:
     sheets = GoogleSheetsApi(TOKEN_FILE)
     analysis.report_to_sheet_output(sheets, TABLE_ID, REPORT_LIST)
     print('Done')
-

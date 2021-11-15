@@ -13,7 +13,6 @@ class GoogleSheetsApi:
         self.request_sleep = 200
         self.authorization(token)
 
-
     # Authorisation in serves google
     # Accept: authorisation token
     def authorization(self, token):
@@ -38,7 +37,10 @@ class GoogleSheetsApi:
             majorDimension=major_dimension
         ).execute()
 
-        return values['values']
+        if 'values' in values.keys():
+            return values['values']
+        else:
+            return []
 
     # Put data to document table_id, sheet list_name in range [start_range_point, end_range_point]
     # in major_dimension (ROWS/COLUMNS)

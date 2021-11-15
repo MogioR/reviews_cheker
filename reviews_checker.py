@@ -48,6 +48,8 @@ if MAKE_REPORT:
     analysis.mark_file_duplicates(GOODS_FILE)
     print('\tMark name entity')
     analysis.mark_name_entity()
+    print('\tMark name entity details')
+    analysis.mark_name_entity_details()
     print('Save backup')
     analysis.save_backup(BACKUP_NAME)
     print('Sending report')
@@ -56,8 +58,7 @@ if MAKE_REPORT:
     print('\tStatistic')
     analysis.report_to_sheet_output_compare(sheets, TABLE_ID, REPORT_LIST)
     print('\tData')
-    # time.sleep(sheets.request_sleep)
+    time.sleep(sheets.request_sleep)
     sheets = GoogleSheetsApi(TOKEN_FILE)
     analysis.report_to_sheet_output(sheets, TABLE_ID, REPORT_LIST)
     print('Done')
-

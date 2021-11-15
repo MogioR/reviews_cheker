@@ -182,15 +182,48 @@ class ReviewAnalysis:
     def mark_name_entity(self):
         self.data['name_entity'] = [True if self.has_name_entity(review) else False for review in self.data['review']]
 
-    # TODO sum_names
     # Return ful name by names dict
-    def sum_names(self, names: dict):
-        pass
+    @staticmethod
+    def merge_names(names: list):
+        full_name = {}
+        has_not_middle = True
+        for name in names:
+            if 'first' in name.keys() and ('first' not in full_name.keys() or len(full_name['first']) < 2):
+                full_name['first'] = name['first']
+
+            if 'middle' in name.keys() and ('middle' not in full_name.keys() or len(full_name['middle']) < 2):
+                full_name['middle'] = name['middle']
+                has_not_middle = False
+
+            if 'last' in name.keys():
+                if ('middle' in full_name.keys() and len(full_name['middle'])>1) or 'last' not in full_name.keys():
+                    full_name['last'] = name['last']
+                elif 'last' in full_name.keys():
+                    if (len(full_name['last']) > 1 and name['last'] != full_name['last']) or\
+                            (len(full_name['last']) == 1 and name['last'][0] != full_name['last'][0]):
+                        full_name['middle'] = full_name['last']
+                        full_name['last'] = name['last']
+                    else:
+                        full_name['last'] = name['last']
+
+        if has_not_middle and 'middle' in full_name.keys() and 'last' in full_name.keys() and\
+                full_name['last'] > full_name['middle']:
+            full_name['last'], full_name['middle'] = full_name['middle'],  full_name['last']
+
+        return full_name
 
     # TODO mark_name_entity_details
     # Mark names and genders
     def mark_name_entity_details(self):
-        pass
+        self.data['initials_workers'] = ''
+        self.data['gender'] = ''
+
+        goods = self.data[(self.data.duble_good == True) & (self.data.spelling == False)]
+        entity_details = list(map(self.get_name_entity_details, goods['review']))
+
+        for i, index in enumerate(goods.index):
+            self.data.at[index, 'initials_workers'] = entity_details[i][0]
+            self.data.at[index, 'gender'] = entity_details[i][1]
 
     # Return true if name a and b is equal
     @staticmethod
@@ -277,9 +310,17 @@ class ReviewAnalysis:
                 if names[name][1] == 'Fem':
                     gender = 'Fem'
 
-            name = list(names.keys())[0]
+            names = [_[0] for _ in names.values()]
+            full_name = ReviewAnalysis.merge_names(names)
+            name_str = ''
+            if 'last' in full_name.keys():
+                name_str = full_name['last']
+            if 'first' in full_name.keys():
+                name_str += ' ' + full_name['first']
+            if 'middle' in full_name.keys():
+                name_str += ' ' + full_name['middle']
 
-            return name, gender
+            return name_str, gender
         else:
             return '', ''
 
@@ -303,8 +344,7 @@ class ReviewAnalysis:
 
     # Send not spelling data in google sheets
     def report_to_sheet_output(self, sheets_api, table_id: str, list_name: str):
-        # self.buf_data = self.data[(self.data.duble_good == True) & (self.data.spelling == False)]
-        buf_data = self.data[(self.data.spelling == False)].sort_values(by=['duble_class', 'duble_good'])
+        buf_data = self.data[(self.data.duble_good == True) & (self.data.spelling == False)]
 
         # Put header
         sheets_api.put_row_to_sheets(table_id, list_name, 1, 'A', [
@@ -312,6 +352,8 @@ class ReviewAnalysis:
             'sectionId',
             'type_page',
             'type_model',
+            'initials_workers',
+            'gender',
             'name_entity',
             'comment'
         ])
@@ -328,14 +370,24 @@ class ReviewAnalysis:
         sheets_api.put_column_to_sheets_packets(table_id, list_name, 'D', shift, data_list, PACKET_SIZE)
 
         # Put name_entitry
+        has_names_list = buf_data['initials_workers'].to_list()
+        # has_names_list = ['initials_workers' if has_names_list[i] else '' for i in range(len(has_names_list))]
+        sheets_api.put_column_to_sheets_packets(table_id, list_name, 'E', shift, has_names_list, PACKET_SIZE)
+
+        # Put name_entitry
+        has_names_list = buf_data['gender'].to_list()
+        # has_names_list = ['gender' if has_names_list[i] else '' for i in range(len(has_names_list))]
+        sheets_api.put_column_to_sheets_packets(table_id, list_name, 'F', shift, has_names_list, PACKET_SIZE)
+
+        # Put name_entitry
         has_names_list = buf_data['name_entity'].to_list()
         has_names_list = ['name_entity' if has_names_list[i] else '' for i in range(len(has_names_list))]
-        sheets_api.put_column_to_sheets_packets(table_id, list_name, 'E', shift, has_names_list, PACKET_SIZE)
+        sheets_api.put_column_to_sheets_packets(table_id, list_name, 'G', shift, has_names_list, PACKET_SIZE)
 
     # Send statistic google sheets
     def report_to_sheet_output_compare(self, sheets_api, table_id: str, list_name: str):
         # Put stats
-        sheets_api.put_column_to_sheets(table_id, list_name, 'G', 1, [
+        sheets_api.put_column_to_sheets(table_id, list_name, 'I', 1, [
             'all_review',
             'amount_Duble',
             'amount_Duble_file',
@@ -354,7 +406,7 @@ class ReviewAnalysis:
                                           (self.data.duble_good == True) &
                                           (self.data.spelling == False)]['review'].index)
 
-        sheets_api.put_column_to_sheets(table_id, list_name, 'H', 1, [
+        sheets_api.put_column_to_sheets(table_id, list_name, 'J', 1, [
             str(len(self.data.index)),
             str(amount_duble),
             str(len(self.data[self.data.duble_file == True]['review'].index)),
@@ -373,6 +425,8 @@ class ReviewAnalysis:
                                         'D' + str(google_api.get_list_size(table_id, list_name)[1]), 'ROWS')
         comment = google_api.get_data_from_sheets(table_id, list_name, 'F2',
                                         'F' + str(google_api.get_list_size(table_id, list_name)[1]), 'ROWS')
+        if len(comment) == 0:
+            print('Reviews with mark "хороший" has not found, check F column.')
 
         buf_data = pd.DataFrame({'review': [], 'sectionId': [], 'type_page': [], 'type_model': []})
         for i in range(len(comment)):
@@ -441,8 +495,8 @@ class ReviewAnalysis:
     # Return corrected review
     @staticmethod
     def correct_review(review: str):
-        # Delete english letter
-        review = re.sub(r'[A-Za-z]', '', review)
+        # # Delete english letter
+        # review = re.sub(r'[A-Za-z]', '', review)
 
         # Correct end
         review = review.strip()
